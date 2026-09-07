@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .audit import load_audit_records, normalized_result
 from .catalog import CONTROLS
 from .config import get_path, load_config
 from .evidence import EvidenceStore, sha256_file
@@ -12,7 +13,7 @@ from .models import RunReport
 from .report import write_html_report, write_json_report
 from .trace import TraceLedger
 
-TRACE_DEPENDENT_CONTROLS = {"OBS-01", "OBS-02", "OBS-05", "OBS-06"}
+TRACE_DEPENDENT_CONTROLS = {"AUT-01", "OBS-01", "OBS-02", "OBS-05", "OBS-06"}
 
 
 def utc_now() -> str:
@@ -71,6 +72,45 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
         result="completed",
     )
 
+    # Optional Docker AI Governance audit ingestion. Local audit records are metadata-only,
+    # but they contain identity/action/target/decision/time. Sensitive host/user fields are
+    # pseudonymized with this run ID before being persisted as evidence.
+    audit_cfg = get_path(cfg, "assessment.docker_audit", {})
+    if isinstance(audit_cfg, dict) and audit_cfg.get("enabled") is True:
+        audit_records, audit_summary = load_audit_records(
+            audit_cfg.get("path") or None,
+            audit_session_id=audit_cfg.get("audit_session_id") or None,
+            agent=audit_cfg.get("agent") or None,
+            max_records=int(audit_cfg.get("max_records", 2000)),
+            redaction_salt=run_id,
+        )
+        audit_ev = store.write_json(
+            "observations/docker-ai-governance-audit.json",
+            {"summary": audit_summary.to_dict(), "records": audit_records},
+            "Docker AI Governance local audit records after run-scoped pseudonymization of user/org/host fields.",
+        )
+        for record in audit_records:
+            trace.append(
+                "docker.audit",
+                actor="docker-ai-governance",
+                action=str(record.get("action_type", "audit-event")),
+                target=str(record.get("resource_id", "")),
+                decision=str(record.get("decision", "")),
+                result=normalized_result(record),
+                task_id=str(get_path(cfg, "assessment.task_id", "")),
+                attributes={
+                    "audit_event_id": record.get("audit_event_id"),
+                    "audit_session_id": record.get("audit_session_id"),
+                    "category": record.get("category"),
+                    "schema_version": record.get("schema_version"),
+                    "agent": record.get("agent"),
+                    "source_timestamp": record.get("timestamp"),
+                    "source": "docker-ai-governance-local-audit",
+                },
+            )
+        ctx["docker_audit_summary"] = audit_summary.to_dict()
+        ctx["docker_audit_evidence"] = audit_ev
+
     # Evaluate telemetry/integrity controls only after the rest of the run has produced evidence.
     for control in CONTROLS:
         if control.id in TRACE_DEPENDENT_CONTROLS:
@@ -101,6 +141,7 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
             "trace_ledger": str(trace_path.relative_to(out)),
             "trace_head_sha256": trace.head_hash,
             "trace_event_count": trace.sequence,
+            "docker_audit": ctx.get("docker_audit_summary", {"enabled": False}),
         },
     )
 
