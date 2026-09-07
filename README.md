@@ -1,23 +1,105 @@
 # Agent Baseline Evidence Lab
 
-**An executable, evidence-driven implementation assessment for the Agent Baseline v1.0-draft, with first-class Docker Sandboxes probes.**
+**Turn the Agent Baseline v1.0-draft into reproducible implementation evidence for a real AI coding-agent environment.**
 
 > Community project. Not an official Docker, Snyk, Keycard, or Agent Baseline project. It does **not** issue certifications or claim official conformance.
 
-The Agent Baseline asks enterprises to identify agents, bound authority, control actions, prove outcomes, and stop agents when things go wrong. This repository explores a practical question: **what evidence can we actually collect for those requirements from a real coding-agent environment?**
+AI-agent security guidance is easy to describe and hard to prove. This lab asks a narrower, more useful question:
 
-Instead of painting 35 controls green, the lab distinguishes `PASS`, `FAIL`, `PARTIAL`, `MANUAL`, and `N/A`, preserves run-scoped evidence, and makes unsupported claims visible.
+> **For this agent, in this environment, during this run: what can we actually prove?**
 
-## What works in V1
+The project maps the 35 draft Agent Baseline controls to declared state, live Docker Sandboxes probes, executable adversarial scenarios, Docker MCP Cedar-policy analysis, optional Docker AI Governance audit records, artifact checks, and explicit manual gaps. Every run emits a tamper-evident evidence bundle plus JSON/HTML reports.
 
-- all 35 v1.0-draft control IDs are represented;
-- declared agent/component/access inventory is validated;
-- a minimal toxic-capability detector identifies a known dangerous three-way combination;
-- Docker Sandboxes can be probed live for sandbox presence, host-filesystem separation and configured network decisions;
-- agent-generated artifact checks are executable hooks, not screenshots;
-- every evidence file is SHA-256 manifested and independently verifiable;
-- JSON and standalone HTML reports are generated per run;
-- the upstream `controls.yaml` can be fetched and hashed so draft drift cannot pass silently.
+## Why this is different
+
+The lab deliberately refuses shortcuts such as:
+
+- `Docker Sandbox installed → CON-03 PASS`
+- `MCP Gateway present → authorization solved`
+- `audit logs exist → end-to-end attribution proven`
+- `policy file exists → enforcement proven`
+
+Instead, every control is one of:
+
+`PASS` · `FAIL` · `PARTIAL` · `MANUAL` · `N/A` · `ERROR`
+
+A skipped live test is **never** counted as a pass.
+
+## Current vertical slice
+
+### Discover
+
+- validates agent identity, ownership, risk context, status and component inventory;
+- records declared composition and effective-access intent;
+- keeps runtime-vs-declared reconciliation visibly incomplete until real observed inventory exists.
+
+### Constrain
+
+- detects a known toxic-capability combination;
+- probes Docker Sandbox presence and active network/filesystem policy state;
+- performs a disposable host-canary separation check with `sbx exec`;
+- evaluates required allow/deny decisions with `sbx policy check network`;
+- records bounded capability-profile evidence without inferring assignment from generic policy presence.
+
+### Authorize
+
+- statically analyzes Docker MCP Cedar policy posture;
+- detects broad actionless permits, registration identity binding, tool/resource/prompt scope, approval guards and local-stdio forbids;
+- can ingest Docker AI Governance audit events for observed action attribution;
+- keeps JIT credentials, delegation attenuation, step-up and proof-of-possession manual until evidence exists.
+
+### Observe
+
+- creates an append-only, SHA-256 hash-chained normalized trace;
+- joins Docker AI Governance metadata events when local audit delivery is enabled;
+- pseudonymizes username, email, org and hostname before persistence;
+- correlates all lab events by stable run ID;
+- writes a per-file SHA-256 evidence manifest;
+- supports external manifest/trace-head pins during verification.
+
+### Validate
+
+- executes adversarial scenarios, not just a scenario plan;
+- currently supports live host-canary, live network-policy decision and offline MCP-policy-contract scenarios;
+- executes agent-generated artifact tests and Dockerfile security contracts.
+
+### Respond
+
+- supports declared/testable response-playbook hooks;
+- refuses to treat a written playbook as proof of credential revocation, quarantine or impact scoping.
+
+## Architecture
+
+```text
+                    Agent Baseline v1.0-draft
+                             control IDs
+                                  │
+                                  ▼
+                         ┌───────────────────┐
+ declared state ────────►│  Evidence Engine  │◄──────── Docker `sbx`
+                         └─────────┬─────────┘
+                                   │
+             ┌─────────────────────┼─────────────────────┐
+             │                     │                     │
+             ▼                     ▼                     ▼
+      Cedar policy            Scenario runner       Docker AI Governance
+      static analysis         safe/live probes      local audit JSONL
+             │                     │                     │
+             └─────────────────────┼─────────────────────┘
+                                   ▼
+                         normalized run trace
+                         SHA-256 hash chain
+                                   │
+                                   ▼
+                         run-scoped evidence
+                         SHA-256 file manifest
+                                   │
+                       ┌───────────┴───────────┐
+                       ▼                       ▼
+                  JSON report              HTML report
+```
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DOCKER_EVIDENCE_SOURCES.md`](docs/DOCKER_EVIDENCE_SOURCES.md).
 
 ## Five-minute path
 
@@ -25,32 +107,36 @@ Instead of painting 35 controls green, the lab distinguishes `PASS`, `FAIL`, `PA
 make install
 make preflight
 make demo
+make verify
 ```
 
-`make demo` is useful even before Docker Sandboxes is installed. Controls that require live `sbx` evidence will correctly report `MANUAL` rather than being faked.
+The offline path is intentionally useful. Without `sbx`, live scenarios become `SKIP`/`MANUAL`; the MCP policy contract and artifact checks still execute.
 
-To enable the live isolation vertical slice:
+To collect the Docker Sandboxes vertical slice:
 
 ```bash
-# Requires the Docker Sandboxes `sbx` CLI and sign-in.
 make sandbox-create
 make demo
 make verify
 ```
 
-The sandbox is created with a **sandbox-scoped deny** for `exfiltration.invalid`; no global policy is modified.
+`sandbox-create` adds only a **sandbox-scoped** deny for the canary destination. It does not widen or replace global policy.
 
-## Output
-
-Each run creates:
+## Evidence output
 
 ```text
 evidence/abl-<timestamp>/
-├── inputs/assessment-config.yaml
+├── inputs/
+│   └── assessment-config.yaml
 ├── controls/
-│   ├── DIS-01/...
+│   ├── AUT-01/...
 │   ├── CON-03/...
+│   ├── VAL-01/...
 │   └── ...
+├── observations/
+│   └── docker-ai-governance-audit.json   # only when enabled
+├── trace/
+│   └── events.ndjson
 ├── assessment.json
 └── manifest.sha256.json
 
@@ -59,57 +145,111 @@ reports/
 └── abl-<timestamp>.html
 ```
 
-Open the HTML report in a browser. Every implemented control states the evaluator used, summary, gaps and evidence paths. The displayed percentage is explicitly an **observed automated pass rate**, not a compliance score.
+Every evidence item includes a digest in the report. The HTML report shows the trace head, event count, manifest digest and Docker audit-event count as a compact **evidence trust chain**.
 
-## Docker Sandboxes integration
+## Tamper-evidence model
 
-V1 uses documented `sbx` surfaces:
+`abl verify` checks three layers:
 
-- `sbx ls --json` to observe the target sandbox;
-- `sbx policy ls <sandbox> --json` to capture active policy state;
-- `sbx exec` for a safe host-filesystem canary test;
-- `sbx policy check network --sandbox ...` for non-invasive allow/deny checks.
+1. every file recorded by `manifest.sha256.json` still matches its SHA-256;
+2. every trace event links to the hash of the previous event;
+3. the final trace hash and event count match the anchors recorded in `assessment.json`.
 
-No secret is exfiltrated and no global access rule is changed by the assessor.
+For a stronger boundary, pin one or both hashes outside the evidence bundle:
+
+```bash
+abl verify evidence/abl-... \
+  --expected-manifest-sha256 <sha256> \
+  --expected-trace-head <sha256>
+```
+
+This project calls the structure **tamper-evident**, not tamper-proof. It does not yet digitally sign evidence bundles.
+
+## Docker AI Governance audit ingestion
+
+Docker AI Governance local audit delivery writes finalized `.jsonl` records containing metadata such as principal, action, target, decision, timestamp, audit session, agent and action type. The lab can ingest them without persisting raw user/org/host identity fields.
+
+Enable it in the assessment config:
+
+```yaml
+assessment:
+  docker_audit:
+    enabled: true
+    # optional; otherwise the documented OS default is used
+    path: ~/Library/Logs/com.docker.sandboxes/sandboxes/auditkit/
+    # strongly recommended when presenting attribution evidence
+    audit_session_id: <docker-audit-session-id>
+    agent: codex
+```
+
+Preview available records without adding them to an assessment:
+
+```bash
+abl audit-summary --agent codex
+```
+
+Local audit delivery is an optional Docker AI Governance capability and is not required for the community/offline path.
+
+## Adversarial scenarios
+
+The sample config currently defines:
+
+| Scenario | Execution | Expected outcome |
+|---|---|---|
+| host filesystem separation | live `sbx exec` | host canary absent |
+| denied egress decision | live `sbx policy check network` | deny |
+| MCP allowlist contract | offline Cedar static analysis | scoped allowlist posture |
+
+Results are stored under `controls/VAL-01/scenario-results.json`.
+
+## MCP policy evidence
+
+The reference policy follows Docker's current MCP governance model:
+
+- explicit server registration permit bound to registered name + `identityURL`;
+- read-only tool use permit;
+- `@requireApproval` for non-read-only tools;
+- resource/prompt permits scoped to the registered server;
+- explicit registration forbid for `local-stdio` host-run servers.
+
+The lab intentionally treats MCP elicitation as a confirmation guardrail, **not** proof of independent administrator approval or separation of duties.
 
 ## Baseline drift
 
-The Agent Baseline is still a draft. Before a customer-facing demo, run:
+The Agent Baseline remains a draft. Before a customer-facing run:
 
 ```bash
 make baseline-sync
 ```
 
-This fetches the authoritative upstream `whitepaper/controls.yaml`, stores it only in `.cache/`, hashes it, verifies the current 35 IDs, and reports ID drift. The official requirement text remains upstream.
+The command fetches and hashes the authoritative upstream `whitepaper/controls.yaml`, compares the permanent IDs and reports drift. Requirement prose remains upstream rather than being silently forked here.
 
-## Architecture
+## Customer PoC
 
-```text
-Agent declaration ───────┐
-                         ├──► Evidence Engine ───► per-control results
-Docker sbx live state ───┤                           │
-                         │                           ▼
-Artifact checks ─────────┘                    evidence bundle
-                                                    │
-                                            SHA-256 manifest
-                                                    │
-                                          JSON + HTML report
+[`docs/CUSTOMER_POC.md`](docs/CUSTOMER_POC.md) turns the repository into a reusable customer exercise: scenario, success criteria, evidence expectations, a 10-minute demo path and explicit claims boundary.
+
+## Development
+
+```bash
+make install
+make test
+make lint
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/CONTROL_COVERAGE.md`](docs/CONTROL_COVERAGE.md), [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) and [`docs/EVIDENCE_MODEL.md`](docs/EVIDENCE_MODEL.md).
+CI runs unit tests, sample-app tests, the offline-safe assessment, bundle verification and uploads the generated assessment as a workflow artifact.
 
-## Why the conservative statuses matter
+## Project status
 
-A tool that says “Docker Sandbox present → CON-03 PASS” would create false confidence. CON-03 is broader than runtime isolation alone. V1 therefore gathers live evidence for the exact checks it implements and leaves broader gaps visible. The same rule applies everywhere else.
+This is an implementation lab, not a finished assurance product. The most important next milestones are:
 
-## Current limitations
+1. ingest and correlate a real Docker AI Governance MCP tool evaluation + execution pair;
+2. capture an actual Codex-in-Sandbox task run without storing prompt content or credentials;
+3. add tested stop/quarantine response exercises;
+4. sign evidence anchors with a portable signing mechanism;
+5. submit upstream Agent Baseline feedback only when a reproducible implementation gap is found.
 
-The strongest missing layer is end-to-end action evidence: prompt/task → model → MCP gateway → policy decision → target-system result. MCP organization policies, just-in-time authority, credential revocation and full response playbooks are intentionally still `MANUAL`/`PARTIAL`. They are the next implementation milestone, not hidden assumptions.
-
-## Upstream feedback
-
-The public draft explicitly asks for implementation feedback. This lab will only submit feedback that emerges from reproducible implementation friction. See [`docs/UPSTREAM_FEEDBACK.md`](docs/UPSTREAM_FEEDBACK.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## License
 
-Apache-2.0 for this repository's code. Agent Baseline materials remain under their upstream licenses and ownership; the authoritative control requirements are not vendored here.
+Apache-2.0 for this repository's code. Agent Baseline materials remain under their upstream licenses and ownership; authoritative control requirements are not vendored here.
