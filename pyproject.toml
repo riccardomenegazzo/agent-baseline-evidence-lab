@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-baseline-evidence-lab"
-version = "0.4.0"
+version = "0.5.0"
 description = "Evidence-driven implementation assessment for the Agent Baseline v1.0-draft, with Docker Sandboxes adapters."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,6 +24,7 @@ dev = ["pytest>=8.3,<9", "ruff>=0.12,<1"]
 
 [project.scripts]
 abl = "agent_baseline_lab.cli:main"
+abl-mcp-correlate = "agent_baseline_lab.correlate_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
