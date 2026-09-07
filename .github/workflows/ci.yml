@@ -35,6 +35,13 @@ jobs:
         run: |
           latest=$(ls -1dt evidence/abl-* | head -1)
           abl verify "$latest"
+      - name: Verify provenance attestation subject binding
+        run: |
+          latest=$(ls -1dt evidence/abl-* | head -1)
+          run_id=$(basename "$latest")
+          abl verify-attestation \
+            "reports/${run_id}.attestation.json" \
+            "${latest}/manifest.sha256.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
