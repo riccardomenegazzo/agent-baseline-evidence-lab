@@ -1,4 +1,4 @@
-.PHONY: install test lint preflight baseline-sync assess demo verify sandbox-create sandbox-run sandbox-shell sandbox-rm
+.PHONY: install test lint preflight baseline-sync assess demo verify audit-summary sandbox-create sandbox-run sandbox-shell sandbox-rm
 
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
@@ -31,6 +31,9 @@ verify:
 	@latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
 	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
 	$(ABL) verify "$$latest"
+
+audit-summary:
+	$(ABL) audit-summary
 
 # Creates a detached Codex sandbox with a deliberately denied canary destination.
 # The deny is sandbox-scoped and does not modify global policy.
