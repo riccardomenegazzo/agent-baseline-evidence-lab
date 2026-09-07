@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -96,19 +97,15 @@ def run_stop_drill(sandbox: str, output_path: str | Path, *, dry_run: bool = Fal
         before = run(["sbx", "ls", "--json"], timeout=30)
         before_json = parse_json_output(before)
         pre_status = _find_sandbox_status(before_json, sandbox) if before_json is not None else None
-
         stop = run(["sbx", "stop", sandbox], timeout=60)
-
         after = run(["sbx", "ls", "--json"], timeout=30)
         after_json = parse_json_output(after)
         post_status = _find_sandbox_status(after_json, sandbox) if after_json is not None else None
         verified = stop.ok and post_status in {"stopped", "stop", "exited", "inactive"}
-
         if post_status is None:
             notes.append("Post-stop sandbox status could not be parsed from `sbx ls --json`.")
         if stop.ok and not verified:
             notes.append("The stop command succeeded, but a structured stopped state was not independently observed.")
-
         result = ResponseDrillResult(
             schema_version=1,
             drill_id=drill_id,
@@ -147,3 +144,21 @@ def load_response_drill(path: str | Path, *, expected_sandbox: str | None = None
             f"response drill sandbox mismatch: expected {expected_sandbox}, observed {payload.get('sandbox')}"
         )
     return payload, errors
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Explicit Docker Sandbox response drill")
+    parser.add_argument("--sandbox", default="abl-demo")
+    parser.add_argument("--output", default=".abl/response/abl-demo-stop.json")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args(argv)
+    try:
+        result = run_stop_drill(args.sandbox, args.output, dry_run=args.dry_run)
+    except (RuntimeError, ValueError) as exc:
+        parser.error(str(exc))
+    print(json.dumps(result.to_dict(), indent=2))
+    return 0 if args.dry_run or result.verified_stopped else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
