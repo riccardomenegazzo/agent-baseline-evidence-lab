@@ -4,7 +4,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .audit import load_audit_records, normalized_result
+from .audit import load_audit_records, normalized_event_types, normalized_result
 from .catalog import CONTROLS
 from .config import get_path, load_config
 from .evaluators import evaluate
@@ -152,25 +152,27 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
             "Docker AI Governance local audit records after run-scoped pseudonymization of user/org/host fields.",
         )
         for record in audit_records:
-            trace.append(
-                "docker.audit",
-                actor="docker-ai-governance",
-                action=str(record.get("action_type", "audit-event")),
-                target=str(record.get("resource_id", "")),
-                decision=str(record.get("decision", "")),
-                result=normalized_result(record),
-                task_id=str(get_path(cfg, "assessment.task_id", "")),
-                attributes={
-                    "audit_event_id": record.get("audit_event_id"),
-                    "audit_session_id": record.get("audit_session_id"),
-                    "category": record.get("category"),
-                    "schema_version": record.get("schema_version"),
-                    "agent": record.get("agent"),
-                    "action_type": record.get("action_type"),
-                    "source_timestamp": record.get("timestamp"),
-                    "source": "docker-ai-governance-local-audit",
-                },
-            )
+            event_types = normalized_event_types(record)
+            for event_type in event_types:
+                trace.append(
+                    event_type,
+                    actor=str(record.get("agent") or "docker-ai-governance"),
+                    action=str(record.get("action_type", "audit-event")),
+                    target=str(record.get("resource_id", "")),
+                    decision=str(record.get("decision", "")),
+                    result=normalized_result(record),
+                    task_id=str(get_path(cfg, "assessment.task_id", "")),
+                    attributes={
+                        "audit_event_id": record.get("audit_event_id"),
+                        "audit_session_id": record.get("audit_session_id"),
+                        "category": record.get("category"),
+                        "schema_version": record.get("schema_version"),
+                        "agent": record.get("agent"),
+                        "action_type": record.get("action_type"),
+                        "source_timestamp": record.get("timestamp"),
+                        "source": "docker-ai-governance-local-audit",
+                    },
+                )
         ctx["docker_audit_summary"] = audit_summary.to_dict()
         ctx["docker_audit_evidence"] = audit_ev
 
