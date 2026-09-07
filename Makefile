@@ -1,6 +1,6 @@
 .PHONY: install test lint preflight baseline-sync assess demo verify audit-summary \
 	live-dry-run live-demo live-demo-mcp mcp-register-dhi sandbox-create sandbox-run sandbox-shell sandbox-rm \
-	response-drill response-drill-full response-drill-dry-run response-link
+	response-drill response-drill-full response-drill-dry-run response-link response-link-verify
 
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
@@ -73,6 +73,14 @@ response-link:
 		"$$latest" .abl/response/abl-demo-stop.json \
 		--sandbox abl-demo --require-revocation \
 		--output "reports/$${run_id}.response-link.json"
+
+response-link-verify:
+	@latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
+	if [ -z "$$latest" ]; then echo "No assessment evidence run found"; exit 1; fi; \
+	run_id=$$(basename "$$latest"); \
+	$(PYTHON) -m agent_baseline_lab.response_link_verify \
+		"reports/$${run_id}.response-link.json" \
+		"$$latest" .abl/response/abl-demo-stop.json
 
 # CI-safe contract check: writes evidence but executes no sbx mutation.
 response-drill-dry-run:
