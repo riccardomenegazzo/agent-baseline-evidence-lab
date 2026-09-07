@@ -15,6 +15,7 @@ from .engine import run_assessment
 from .evidence import verify_bundle
 from .live_run import cleanup_sandbox, run_agent_task
 from .models import Status
+from .provenance import verify_run_attestation
 
 
 ANSI = {
@@ -51,6 +52,16 @@ def print_report(report) -> None:
     print("  ".join(f"{s.value}={counts[s]}" for s in Status))
 
 
+def _print_report_paths(report, json_path: Path, html_path: Path, output_root: str) -> None:
+    print(f"\nJSON report: {json_path}")
+    print(f"HTML report: {html_path}")
+    print(f"Evidence:    {Path(output_root).resolve() / 'evidence' / report.run_id}")
+    attestation = report.metadata.get("run_attestation", {})
+    if isinstance(attestation, dict) and attestation.get("path"):
+        print(f"Attestation: {Path(output_root).resolve() / str(attestation['path'])}")
+        print(f"Attest SHA:  {attestation.get('sha256', '')}")
+
+
 def cmd_assess(args) -> int:
     try:
         report, json_path, html_path = run_assessment(args.config, args.output)
@@ -58,9 +69,7 @@ def cmd_assess(args) -> int:
         print(f"configuration error: {exc}", file=sys.stderr)
         return 2
     print_report(report)
-    print(f"\nJSON report: {json_path}")
-    print(f"HTML report: {html_path}")
-    print(f"Evidence:    {Path(args.output).resolve() / 'evidence' / report.run_id}")
+    _print_report_paths(report, json_path, html_path, args.output)
     return 1 if any(r.status in (Status.FAIL, Status.ERROR) for r in report.results) else 0
 
 
@@ -105,6 +114,23 @@ def cmd_verify(args) -> int:
     print(json.dumps(summary, indent=2))
     if not args.expected_manifest_sha256 and not args.expected_trace_head:
         print("Note: no external hash anchor was supplied; this verifies internal consistency, not a digital signature.")
+    return 0 if ok else 1
+
+
+def cmd_verify_attestation(args) -> int:
+    ok, errors, summary = verify_run_attestation(
+        Path(args.attestation),
+        Path(args.manifest),
+        expected_attestation_sha256=args.expected_attestation_sha256,
+    )
+    if ok:
+        print("Run attestation verified against evidence manifest.")
+    else:
+        for error in errors:
+            print(error, file=sys.stderr)
+    print(json.dumps(summary, indent=2))
+    if not args.expected_attestation_sha256:
+        print("Note: no external attestation hash was supplied; authenticity is not established.")
     return 0 if ok else 1
 
 
@@ -158,8 +184,7 @@ def cmd_live_run(args) -> int:
             assessment_rc = 2
         else:
             print_report(report)
-            print(f"\nJSON report: {json_path}")
-            print(f"HTML report: {html_path}")
+            _print_report_paths(report, json_path, html_path, args.output)
             assessment_rc = (
                 1
                 if any(r.status in (Status.FAIL, Status.ERROR) for r in report.results)
@@ -201,6 +226,19 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--expected-manifest-sha256", default=None, help="optional externally pinned manifest hash")
     verify.add_argument("--expected-trace-head", default=None, help="optional externally pinned trace head hash")
     verify.set_defaults(func=cmd_verify)
+
+    verify_att = sub.add_parser(
+        "verify-attestation",
+        help="verify a run attestation against its evidence manifest",
+    )
+    verify_att.add_argument("attestation")
+    verify_att.add_argument("manifest")
+    verify_att.add_argument(
+        "--expected-attestation-sha256",
+        default=None,
+        help="optional externally pinned attestation hash",
+    )
+    verify_att.set_defaults(func=cmd_verify_attestation)
 
     audit = sub.add_parser(
         "audit-summary",
