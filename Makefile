@@ -1,5 +1,6 @@
 .PHONY: install test lint preflight baseline-sync assess demo verify audit-summary \
-	live-dry-run live-demo live-demo-mcp mcp-register-dhi sandbox-create sandbox-run sandbox-shell sandbox-rm
+	live-dry-run live-demo live-demo-mcp mcp-register-dhi sandbox-create sandbox-run sandbox-shell sandbox-rm \
+	response-drill response-drill-dry-run
 
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
@@ -50,6 +51,14 @@ mcp-register-dhi:
 
 live-demo-mcp:
 	$(ABL) live-run --config examples/agent-mcp.yaml --task examples/task-mcp.md --assess --with-docker-audit
+
+# Explicit containment exercise. This affects only the named abl-demo sandbox.
+response-drill:
+	$(PYTHON) -m agent_baseline_lab.response --sandbox abl-demo --output .abl/response/abl-demo-stop.json
+
+# CI-safe contract check: writes evidence but executes no sbx mutation.
+response-drill-dry-run:
+	$(PYTHON) -m agent_baseline_lab.response --sandbox abl-demo --output .abl/response/abl-demo-stop-dry-run.json --dry-run
 
 # Lower-level sandbox helpers retained for manual exploration.
 sandbox-create:
