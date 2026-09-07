@@ -1,6 +1,6 @@
 .PHONY: install test lint preflight baseline-sync assess demo verify audit-summary \
 	live-dry-run live-demo live-demo-mcp mcp-register-dhi sandbox-create sandbox-run sandbox-shell sandbox-rm \
-	response-drill response-drill-dry-run
+	response-drill response-drill-full response-drill-dry-run
 
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
@@ -56,9 +56,16 @@ live-demo-mcp:
 response-drill:
 	$(PYTHON) -m agent_baseline_lab.response --sandbox abl-demo --output .abl/response/abl-demo-stop.json
 
+# Stronger response exercise: create a disposable sandbox-scoped custom credential binding,
+# verify it exists, revoke it, verify it is gone, then stop only abl-demo.
+response-drill-full:
+	$(PYTHON) -m agent_baseline_lab.response --sandbox abl-demo \
+		--output .abl/response/abl-demo-stop.json \
+		--test-disposable-secret-revocation
+
 # CI-safe contract check: writes evidence but executes no sbx mutation.
 response-drill-dry-run:
-	$(PYTHON) -m agent_baseline_lab.response --sandbox abl-demo --output .abl/response/abl-demo-stop-dry-run.json --dry-run
+	$(PYTHON) -m agent_baseline_lab.response --sandbox abl-demo --output .abl/response/abl-demo-stop-dry-run.json --dry-run --test-disposable-secret-revocation
 
 # Lower-level sandbox helpers retained for manual exploration.
 sandbox-create:
