@@ -207,7 +207,11 @@ def correlate_session(
         until=until,
         source=source,
     )
-    output = Path(output_path) if output_path else Path("reports") / f"{session_id}.audit-correlation.json"
+    output = (
+        Path(output_path)
+        if output_path
+        else Path("reports") / f"{session_id}.audit-correlation.json"
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     payload = result.to_dict()
     payload["session_sha256"] = sha256_file(path)
@@ -217,11 +221,23 @@ def correlate_session(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Correlate an Agent Baseline live session with finalized Docker AI Governance audit records"
+        description=(
+            "Correlate an Agent Baseline live session with finalized Docker AI Governance "
+            "audit records"
+        )
     )
     parser.add_argument("session")
-    parser.add_argument("--path", default=None, help="optional Docker audit directory or finalized .jsonl file")
+    parser.add_argument(
+        "--path",
+        default=None,
+        help="optional Docker audit directory or finalized .jsonl file",
+    )
     parser.add_argument("--output", default=None)
+    parser.add_argument(
+        "--require-exact",
+        action="store_true",
+        help="exit non-zero unless the run-scoped marker is observed in audit resource_id",
+    )
     args = parser.parse_args(argv)
     try:
         result, output = correlate_session(
@@ -233,7 +249,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(exc))
     print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
     print(f"Correlation evidence: {output}")
-    return 0 if result.strength == "exact-marker" else 1
+    if args.require_exact and result.strength != "exact-marker":
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
