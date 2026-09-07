@@ -42,6 +42,26 @@ jobs:
           assert payload['credential_revocation_tested'] is False
           assert payload['credential_evidence'] == {}
           PY
+      - name: Exercise full interview orchestration without Docker mutation
+        run: >-
+          python -m agent_baseline_lab.interview_demo
+          --config examples/agent.yaml
+          --task examples/task.md
+          --dry-run
+      - name: Assert interview dry-run cannot produce positive response claims
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          summaries = sorted(Path('reports').glob('*.interview-demo.json'), key=lambda p: p.stat().st_mtime)
+          assert summaries, 'interview-demo summary missing'
+          payload = json.loads(summaries[-1].read_text())
+          assert payload['agent_executed'] is False
+          assert payload['sandbox_stop_verified'] is False
+          assert payload['credential_binding_revocation_verified'] is False
+          assert payload['response_link_verified'] is False
+          assert payload['response_link'] == ''
+          PY
       - name: Run offline-safe assessment
         run: |
           set +e
