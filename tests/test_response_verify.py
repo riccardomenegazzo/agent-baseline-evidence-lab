@@ -22,6 +22,7 @@ def test_verify_response_evidence_requires_stop(tmp_path: Path) -> None:
     assert not ok
     assert "sandbox stop was not independently verified" in errors
     assert summary["verified_stopped"] is False
+    assert len(summary["evidence_sha256"]) == 64
 
 
 def test_verify_response_evidence_distinguishes_revocation(tmp_path: Path) -> None:
@@ -44,4 +45,4 @@ def test_verify_response_evidence_distinguishes_revocation(tmp_path: Path) -> No
         require_revocation=True,
     )
     assert not ok
-    assert "credential revocation was not tested" in errors
+    assert "sandbox-scoped credential binding revocation was not verified" in errors
