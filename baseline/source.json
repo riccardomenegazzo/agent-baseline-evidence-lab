@@ -1,0 +1,11 @@
+{
+  "project": "Agent Baseline",
+  "version": "1.0-draft",
+  "repository": "agentbaseline/agentbaseline",
+  "path": "whitepaper/controls.yaml",
+  "upstream_blob_sha_observed": "feb2248688a977120838a9db3aad1e7cfa58015f",
+  "published": "2026-07-30",
+  "public_comment_closes": "2026-09-30",
+  "source_url": "https://raw.githubusercontent.com/agentbaseline/agentbaseline/main/whitepaper/controls.yaml",
+  "note": "The upstream controls file is the source of truth. This project does not claim certification or official conformance."
+}
