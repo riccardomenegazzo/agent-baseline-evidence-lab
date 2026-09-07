@@ -1,4 +1,4 @@
-.PHONY: install test lint preflight baseline-sync assess demo verify audit-summary \
+.PHONY: install test lint preflight baseline-sync assess demo verify evidence-matrix audit-summary \
 	live-dry-run live-demo live-demo-mcp mcp-register-dhi sandbox-create sandbox-run sandbox-shell sandbox-rm \
 	response-drill response-drill-full response-drill-dry-run response-link response-link-verify \
 	interview-demo interview-demo-mcp interview-demo-dry-run audit-correlate-latest audit-correlate-exact
@@ -34,6 +34,14 @@ verify:
 	@latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
 	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
 	$(ABL) verify "$$latest"
+
+# Reproducibly attack disposable copies of the latest verified bundle. Demonstrates
+# integrity, truncation, coordinated-rewrite and never-emitted-event boundaries.
+evidence-matrix:
+	@latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
+	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
+	$(PYTHON) -m agent_baseline_lab.evidence_matrix "$$latest" \
+		--output reports/evidence-verification-matrix.json
 
 audit-summary:
 	$(ABL) audit-summary
