@@ -68,6 +68,38 @@ python3 -m agent_baseline_lab.response_verify \
 
 The verifier emits the SHA-256 of the response artifact so the result can be pinned or correlated with another evidence bundle.
 
+## Link response evidence to the original assessment
+
+Containment happens **after** the main assessment, so the lab does not mutate the original evidence bundle or rerun controls against an intentionally stopped sandbox. Instead, create a separate response-link statement:
+
+```bash
+make response-link
+```
+
+The target:
+
+1. locates the latest assessment evidence bundle;
+2. verifies its manifest and trace chain with `verify_bundle`;
+3. verifies `.abl/response/abl-demo-stop.json` including credential-binding revocation;
+4. emits `reports/<run-id>.response-link.json`.
+
+The response-link statement binds two immutable subjects by SHA-256:
+
+```text
+assessment manifest ─────┐
+                         ├── response-link statement
+response drill ──────────┘
+```
+
+Its claims include:
+
+```text
+sandboxStopVerified
+sandboxScopedCredentialBindingRevocationVerified
+```
+
+The statement is deliberately marked `signed: false`. It provides digest-level correlation and tamper evidence; authenticity still requires an external signature or pinned digest.
+
 ## CI-safe mode
 
 ```bash
