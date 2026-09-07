@@ -15,6 +15,8 @@ class MCPPolicyAnalysis:
     has_tool_scope: bool
     has_resource_scope: bool
     has_prompt_scope: bool
+    has_primordial_scope: bool
+    has_argument_guard: bool
     has_approval_guard: bool
     has_local_stdio_forbid: bool
     has_identity_url_binding: bool
@@ -38,6 +40,8 @@ def analyze_policy(path: str | Path) -> MCPPolicyAnalysis:
         has_tool_scope='MCP::Action::"invokeTool"' in normalized,
         has_resource_scope='MCP::Action::"readResource"' in normalized,
         has_prompt_scope='MCP::Action::"getPrompt"' in normalized,
+        has_primordial_scope='MCP::Action::"invokePrimordial"' in normalized,
+        has_argument_guard=("context has args" in normalized and "context.args" in normalized),
         has_approval_guard="@requireApproval" in normalized,
         has_local_stdio_forbid=bool(
             re.search(r"forbid\s*\([^;]+resource\.type\s*==\s*\"local-stdio\"", normalized, re.DOTALL)
