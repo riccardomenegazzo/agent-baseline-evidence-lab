@@ -1,6 +1,7 @@
 .PHONY: install test lint preflight baseline-sync assess demo verify audit-summary \
 	live-dry-run live-demo live-demo-mcp mcp-register-dhi sandbox-create sandbox-run sandbox-shell sandbox-rm \
-	response-drill response-drill-full response-drill-dry-run response-link response-link-verify
+	response-drill response-drill-full response-drill-dry-run response-link response-link-verify \
+	interview-demo interview-demo-mcp interview-demo-dry-run
 
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
@@ -51,6 +52,24 @@ mcp-register-dhi:
 
 live-demo-mcp:
 	$(ABL) live-run --config examples/agent-mcp.yaml --task examples/task-mcp.md --assess --with-docker-audit
+
+# Manager-facing end-to-end flow. Uses the unique sandbox created by the agent run,
+# performs disposable credential-binding revocation + stop, links immutable evidence,
+# verifies the link, then removes only that unique disposable sandbox.
+interview-demo:
+	$(PYTHON) -m agent_baseline_lab.interview_demo \
+		--config examples/agent.yaml --task examples/task.md --cleanup
+
+# MCP + Docker AI Governance audit variant. Register DHI first with `make mcp-register-dhi`.
+interview-demo-mcp:
+	$(PYTHON) -m agent_baseline_lab.interview_demo \
+		--config examples/agent-mcp.yaml --task examples/task-mcp.md \
+		--with-docker-audit --cleanup
+
+# Full orchestration contract with zero sbx mutation and no positive response link.
+interview-demo-dry-run:
+	$(PYTHON) -m agent_baseline_lab.interview_demo \
+		--config examples/agent.yaml --task examples/task.md --dry-run
 
 # Explicit containment exercise. This affects only the named abl-demo sandbox.
 response-drill:
