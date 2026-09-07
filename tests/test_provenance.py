@@ -1,17 +1,16 @@
 from pathlib import Path
 
-from agent_baseline_lab.evidence import EvidenceStore
+from agent_baseline_lab.evidence import EvidenceStore, sha256_file
 from agent_baseline_lab.models import Result, RunReport, Status
-from agent_baseline_lab.provenance import build_run_attestation
+from agent_baseline_lab.provenance import (
+    build_run_attestation,
+    verify_run_attestation,
+    write_run_attestation,
+)
 
 
-def test_attestation_binds_manifest_and_agent_run(tmp_path: Path) -> None:
-    evidence = tmp_path / "evidence"
-    store = EvidenceStore(evidence)
-    store.write_json("observation.json", {"ok": True})
-    manifest = store.finalize_manifest()
-
-    report = RunReport(
+def _report() -> RunReport:
+    return RunReport(
         run_id="abl-test",
         started_at="2026-09-08T00:00:00+00:00",
         completed_at="2026-09-08T00:00:01+00:00",
@@ -25,7 +24,10 @@ def test_attestation_binds_manifest_and_agent_run(tmp_path: Path) -> None:
             "docker_audit": {"enabled": False},
         },
     )
-    context = {
+
+
+def _context() -> dict:
+    return {
         "agent_run": {
             "session_id": "agent-1",
             "agent": "codex",
@@ -43,7 +45,14 @@ def test_attestation_binds_manifest_and_agent_run(tmp_path: Path) -> None:
         }
     }
 
-    statement = build_run_attestation(report, manifest_path=manifest, context=context)
+
+def test_attestation_binds_manifest_and_agent_run(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    store = EvidenceStore(evidence)
+    store.write_json("observation.json", {"ok": True})
+    manifest = store.finalize_manifest()
+
+    statement = build_run_attestation(_report(), manifest_path=manifest, context=_context())
 
     assert statement["_type"] == "https://in-toto.io/Statement/v1"
     assert statement["subject"][0]["name"] == "manifest.sha256.json"
@@ -55,3 +64,29 @@ def test_attestation_binds_manifest_and_agent_run(tmp_path: Path) -> None:
     assert predicate["agentRun"]["promptPersisted"] is False
     assert predicate["integrity"]["signed"] is False
     assert predicate["integrity"]["externalTrustAnchorRequiredForAuthenticity"] is True
+
+
+def test_attestation_verifier_detects_manifest_mutation(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    store = EvidenceStore(evidence)
+    store.write_json("observation.json", {"ok": True})
+    manifest = store.finalize_manifest()
+    attestation = tmp_path / "run.attestation.json"
+    attestation_hash = write_run_attestation(
+        _report(), manifest_path=manifest, context=_context(), output_path=attestation
+    )
+
+    ok, errors, summary = verify_run_attestation(
+        attestation,
+        manifest,
+        expected_attestation_sha256=attestation_hash,
+    )
+    assert ok is True
+    assert errors == []
+    assert summary["external_attestation_anchor_checked"] is True
+
+    manifest.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    ok, errors, _ = verify_run_attestation(attestation, manifest)
+    assert ok is False
+    assert "attestation subject digest does not match evidence manifest" in errors
+    assert sha256_file(attestation) == attestation_hash
