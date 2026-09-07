@@ -122,6 +122,27 @@ make verify
 
 `sandbox-create` adds only a **sandbox-scoped** deny for the canary destination. It does not widen or replace global policy.
 
+## Real Codex-in-Sandbox execution
+
+The V0.4 live path runs a real coding task in a **disposable copy** of the sample workspace and feeds that exact execution back into the assessment:
+
+```bash
+make live-demo
+```
+
+The live-run capsule stores prompt/output digests instead of raw content by default, captures before/after workspace hashes, Docker Sandbox policy observations and the agent task result, then runs artifact checks against the **agent-modified workspace** rather than the original template.
+
+For the MCP vertical slice, register Docker's public DHI MCP endpoint and run Codex with it pre-loaded through the Docker Sandboxes MCP Gateway:
+
+```bash
+make mcp-register-dhi
+make live-demo-mcp
+```
+
+The full configuration uses `policies/mcp/dhi-readonly.cedar`: registration is identity-bound to `https://dhi.io/mcp`, read-only tools are allowed, non-read-only tools are forbidden, local-stdio registration is forbidden, and dynamic gateway expansion is blocked. The Cedar file is **reference policy evidence** until installed and enforced through Docker AI Governance.
+
+See [`docs/LIVE_AGENT_RUN.md`](docs/LIVE_AGENT_RUN.md) for the execution, privacy and governance model.
+
 ## Evidence output
 
 ```text
@@ -242,8 +263,8 @@ CI runs unit tests, sample-app tests, the offline-safe assessment, bundle verifi
 
 This is an implementation lab, not a finished assurance product. The most important next milestones are:
 
-1. ingest and correlate a real Docker AI Governance MCP tool evaluation + execution pair;
-2. capture an actual Codex-in-Sandbox task run without storing prompt content or credentials;
+1. collect the first real Docker AI Governance MCP `tool_invocation` + `tool_execution` pair from the DHI live demo;
+2. propagate or derive a stronger cross-system correlation key between the agent task and Docker audit session;
 3. add tested stop/quarantine response exercises;
 4. sign evidence anchors with a portable signing mechanism;
 5. submit upstream Agent Baseline feedback only when a reproducible implementation gap is found.

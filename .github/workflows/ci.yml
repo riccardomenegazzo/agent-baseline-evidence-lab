@@ -22,11 +22,14 @@ jobs:
       - run: ruff check src tests scripts sample-app
       - run: pytest
       - run: python -m unittest discover -s sample-app/tests -v
+      - name: Exercise metadata-only live-run capsule
+        run: abl live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess
       - name: Run offline-safe assessment
         run: |
           set +e
           abl assess --config examples/agent.yaml
           rc=$?
+          # FAIL is meaningful assessment output; evaluator errors would still be visible in the report.
           test "$rc" -eq 0 -o "$rc" -eq 1
       - name: Verify generated evidence bundle
         run: |
@@ -39,3 +42,4 @@ jobs:
           path: |
             reports/
             evidence/
+            agent-runs/
