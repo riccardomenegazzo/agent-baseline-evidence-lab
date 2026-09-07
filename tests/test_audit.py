@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from agent_baseline_lab.audit import load_audit_records
+from agent_baseline_lab.audit import load_audit_records, normalized_event_types
 
 
 def test_audit_ingest_redacts_identity_and_filters_session(tmp_path: Path):
@@ -54,3 +54,28 @@ def test_audit_time_window_filters_records(tmp_path: Path) -> None:
     )
     assert [record["audit_event_id"] for record in records] == ["b"]
     assert summary.records_selected == 1
+
+
+def test_tool_invocation_evaluation_maps_to_mcp_and_policy_events() -> None:
+    record = {
+        "category": "AUDIT_CATEGORY_EVALUATION",
+        "action_type": "tool_invocation",
+        "decision": "AUDIT_DECISION_ALLOW",
+    }
+    assert normalized_event_types(record) == ["mcp.tool", "policy.decision"]
+
+
+def test_tool_execution_maps_to_mcp_tool_without_duplicate_policy_decision() -> None:
+    record = {
+        "category": "AUDIT_CATEGORY_EXECUTION",
+        "action_type": "tool_execution",
+    }
+    assert normalized_event_types(record) == ["mcp.tool"]
+
+
+def test_server_registration_is_semantically_distinct() -> None:
+    record = {
+        "category": "AUDIT_CATEGORY_EVALUATION",
+        "action_type": "server_registration",
+    }
+    assert normalized_event_types(record) == ["mcp.registration", "policy.decision"]
