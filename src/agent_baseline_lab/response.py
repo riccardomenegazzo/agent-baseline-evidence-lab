@@ -91,7 +91,7 @@ def run_stop_drill(sandbox: str, output_path: str | Path, *, dry_run: bool = Fal
             stop_stderr="",
             verified_stopped=False,
             credential_revocation_tested=False,
-            notes=notes + ["Dry run: no Docker Sandbox command was executed."],
+            notes=[*notes, "Dry run: no Docker Sandbox command was executed."],
         )
     else:
         before = run(["sbx", "ls", "--json"], timeout=30)
