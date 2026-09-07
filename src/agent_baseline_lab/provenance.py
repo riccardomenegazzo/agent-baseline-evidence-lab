@@ -105,3 +105,59 @@ def write_run_attestation(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(statement, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return sha256_file(output_path)
+
+
+def verify_run_attestation(
+    attestation_path: Path,
+    manifest_path: Path,
+    *,
+    expected_attestation_sha256: str | None = None,
+) -> tuple[bool, list[str], dict[str, Any]]:
+    """Verify statement shape and that its subject still matches the evidence manifest.
+
+    An optional expected attestation hash turns this into an externally anchored check.
+    Without it, this verifies statement consistency only; the statement is intentionally unsigned.
+    """
+    errors: list[str] = []
+    try:
+        statement = json.loads(attestation_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, [f"attestation cannot be parsed: {exc}"], {}
+
+    if statement.get("_type") != STATEMENT_TYPE:
+        errors.append("unexpected statement type")
+    if statement.get("predicateType") != PREDICATE_TYPE:
+        errors.append("unexpected predicate type")
+
+    subjects = statement.get("subject", [])
+    recorded_manifest_hash = ""
+    if not isinstance(subjects, list) or len(subjects) != 1:
+        errors.append("attestation must contain exactly one evidence-manifest subject")
+    else:
+        subject = subjects[0] if isinstance(subjects[0], dict) else {}
+        digest = subject.get("digest", {}) if isinstance(subject, dict) else {}
+        recorded_manifest_hash = str(digest.get("sha256", ""))
+
+    observed_manifest_hash = sha256_file(manifest_path) if manifest_path.exists() else ""
+    if not observed_manifest_hash:
+        errors.append("evidence manifest is missing")
+    elif recorded_manifest_hash != observed_manifest_hash:
+        errors.append("attestation subject digest does not match evidence manifest")
+
+    observed_attestation_hash = sha256_file(attestation_path) if attestation_path.exists() else ""
+    if expected_attestation_sha256 and observed_attestation_hash != expected_attestation_sha256:
+        errors.append("attestation hash does not match external expected value")
+
+    predicate = statement.get("predicate", {}) if isinstance(statement, dict) else {}
+    integrity = predicate.get("integrity", {}) if isinstance(predicate, dict) else {}
+    if integrity.get("signed") is not False:
+        errors.append("unexpected signed claim; this attestation format is currently unsigned")
+
+    summary = {
+        "manifest_sha256": observed_manifest_hash,
+        "attestation_sha256": observed_attestation_hash,
+        "subject_matches_manifest": recorded_manifest_hash == observed_manifest_hash,
+        "external_attestation_anchor_checked": bool(expected_attestation_sha256),
+        "signed": False,
+    }
+    return not errors, errors, summary
