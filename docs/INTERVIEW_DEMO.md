@@ -1,88 +1,138 @@
 # Five-minute technical demo
 
-This demo is designed for a technical manager. It prioritizes the problem, evidence and limitations over feature count.
+This walkthrough is designed for a Docker technical manager. It prioritizes customer problem, observed evidence, repeatability and claims boundaries over feature count.
+
+## Before the call
+
+Install and validate the local environment:
+
+```bash
+make install
+make preflight
+make baseline-sync
+```
+
+The preferred community demo is now a single command:
+
+```bash
+make interview-demo
+```
+
+It runs a real Codex task in a unique Docker Sandbox, assesses the resulting environment, performs a disposable response drill against **that exact sandbox**, links response evidence to the immutable assessment, independently verifies the link, and removes only the unique disposable sandbox.
+
+For the MCP / Docker AI Governance variant:
+
+```bash
+make mcp-register-dhi
+make interview-demo-mcp
+```
+
+Use the MCP variant only when the required Docker capabilities are available. The community path is sufficient to explain the architecture without pretending paid governance evidence exists.
 
 ## 0:00–0:30 — Frame the problem
 
 > Security guidance for AI agents is easy to describe and hard to prove. I wanted to know whether a customer could take a real coding-agent run and answer a narrower question: for this agent, in this environment, during this run, what can we actually prove against the Agent Baseline?
 
-Emphasize that the project is a community implementation experiment, not an official Docker or Agent Baseline conformance tool.
+Emphasize that this is a community implementation experiment, not an official Docker or Agent Baseline conformance product.
 
-## 0:30–1:10 — Show the architecture
+## 0:30–1:05 — Show the architecture
 
-Open the README architecture diagram and explain the evidence sources:
+Open the README architecture diagram:
 
 ```text
-Agent Baseline controls
-        │
-        ▼
-Evidence Engine
+real coding task
+      │
+      ▼
+Codex + unique Docker Sandbox
+      │
+      ▼
+Agent Baseline Evidence Engine
    ├── declared state
-   ├── Docker sbx probes
-   ├── MCP Cedar policy analysis
+   ├── sbx boundary probes
+   ├── MCP Cedar analysis
    ├── adversarial scenarios
-   ├── Docker AI Governance audit metadata
-   └── artifact tests
-        │
-        ▼
-hash-chained trace + evidence manifest
-        │
-        ├── JSON/HTML assessment
-        └── run attestation
+   ├── optional Docker audit metadata
+   └── artifact checks
+      │
+      ▼
+hash-chained trace + manifest
+      │
+      ├── JSON/HTML assessment
+      └── unsigned run attestation
+      │
+      ▼
+response drill
+      │
+      ▼
+assessment SHA ─┐
+                ├── verified response-link
+response SHA ───┘
 ```
 
-The key point is that the engine never treats product presence as proof of a control.
+The key point:
 
-## 1:10–2:10 — Run a real coding-agent task
+> The engine never turns product presence into proof of a control.
 
-Preflight:
+## 1:05–1:55 — Show a real run
+
+Run:
 
 ```bash
-abl preflight
+make interview-demo
 ```
 
-Live Codex path:
+The final summary should make the lifecycle visible:
 
-```bash
-abl live-run \
-  --config examples/agent.yaml \
-  --task examples/task.md \
-  --assess
+```text
+INTERVIEW EVIDENCE FLOW
+  session:             agent-...
+  sandbox:             abl-demo-...
+  assessment run:      abl-...
+  bundle verified:     True
+  stop verified:       True
+  credential revoked:  True (Docker sandbox binding)
+  response link:       True
+  cleanup succeeded:   True
+  HTML report:         ...
 ```
 
-For the MCP vertical slice use `examples/agent-mcp.yaml` after registering the documented DHI MCP endpoint.
-
-Explain what is captured by default:
+Explain what the live-run capsule records by default:
 
 - task SHA-256, not raw prompt;
-- agent stdout/stderr SHA-256, not raw output;
-- disposable workspace before/after root hashes;
+- stdout/stderr SHA-256, not raw model output;
+- disposable workspace before/after content hashes;
 - changed-path set;
-- Docker Sandbox identity and policy observations;
-- optional Docker AI Governance audit metadata;
-- resulting Agent Baseline assessment.
+- actual unique sandbox identity;
+- Docker Sandbox policy observations;
+- result of artifact checks against the **agent-modified workspace**.
 
-## 2:10–2:55 — Show evidence, not a green dashboard
+This is useful customer evidence without unnecessarily persisting developer prompt/output content.
+
+## 1:55–2:40 — Show evidence, not a green dashboard
 
 Open the generated HTML report.
 
-Call out at least one `PARTIAL` or `MANUAL` control and explain why it is not promoted to `PASS`.
+Select one `PARTIAL` or `MANUAL` control and explain why it did not become `PASS`.
 
 Recommended example:
 
-> A Cedar file describing approval or tool scope is design evidence. Unless I observe the policy being enforced in the relevant execution, I do not call that full authorization proof.
+> A Cedar file describing approval or tool scope is design evidence. Unless I observe the relevant policy decision during execution, I do not call that full authorization proof.
 
-This is the project's most important credibility rule.
+A second useful example:
 
-## 2:55–3:40 — Verify integrity and provenance
+> A Docker audit daemon session is not automatically a business-task ID. I distinguish bounded correlation from exact correlation rather than joining events because their timestamps happen to overlap.
 
-Verify the exported evidence bundle:
+This credibility rule is more important than maximizing the green count.
+
+## 2:40–3:20 — Verify integrity and provenance
+
+Verify the evidence bundle:
 
 ```bash
 abl verify evidence/abl-...
 ```
 
-Then verify the run attestation:
+Verify the run attestation:
 
 ```bash
 abl verify-attestation \
@@ -90,60 +140,91 @@ abl verify-attestation \
   evidence/abl-.../manifest.sha256.json
 ```
 
-Explain the trust boundary:
+Explain:
 
-> This proves internal consistency and binds the exported manifest to the observed run facts. It is intentionally unsigned. Authenticity requires an external digest anchor today; I did not want to call a self-recomputed hash a signature.
+> This verifies internal consistency and binds the exported manifest to observed run facts. The statement is intentionally unsigned. I do not call a self-recomputed hash a signature; authenticity needs an external trust anchor.
 
-If useful, mention that this implementation experience maps directly to the concern raised in Agent Baseline issue #26 around independently verifiable evidence.
+The trace is append-only and SHA-256 hash-chained. The file bundle has a separate SHA-256 manifest.
 
-## 3:40–4:15 — Show the adversarial mindset
+## 3:20–3:50 — Show the adversarial mindset
 
-Point to the scenario runner and negative provenance test:
+Point to the executable scenarios:
 
-- host-canary separation;
+- host-canary filesystem separation;
 - network-policy decision checks;
-- MCP-policy contract scenario;
-- mutated-manifest attestation verification failure.
+- MCP policy contract validation;
+- agent-generated artifact tests;
+- negative provenance tests where evidence mutation must cause verification failure.
 
-The point is not offensive security. It is that each claim has an expected failure condition.
+The point is not offensive security. It is that every claim should have an explicit failure condition.
 
-## 4:15–4:45 — Show response as evidence, not a playbook
+## 3:50–4:25 — Show response as evidence, not a playbook
 
-Only do this against the disposable `abl-demo` sandbox.
+The single-command flow already performed the response exercise on the exact unique sandbox created for that run.
 
-```bash
-make response-drill-full
-make response-link
-```
-
-Explain the two independent postconditions:
+The two separate postconditions are:
 
 ```text
-sandbox stop                              VERIFIED
+sandbox stop                               VERIFIED
 sandbox-scoped credential binding removal VERIFIED
 upstream provider token invalidation       NOT CLAIMED
 ```
 
-The full drill creates a unique disposable custom-secret binding only for `abl-demo`, observes it, removes it, observes that it is gone, and then verifies that only `abl-demo` reaches a stopped state. No real OpenAI, GitHub, or other provider credential is modified.
+The drill creates random disposable secret material through a host-side command, binds it only to the run sandbox, verifies the placeholder exists, removes only that binding, verifies it is absent, and then independently verifies the sandbox reached a stopped state.
 
-`make response-link` does **not** rewrite the original assessment bundle. It creates a third unsigned statement whose subjects are the SHA-256 digest of the original assessment manifest and the SHA-256 digest of the response artifact. This gives a clean evidence timeline:
+No real OpenAI, GitHub, AWS or other provider credential is used.
+
+Then show the response link:
 
 ```text
-assessment run ──► immutable bundle
-                       │
-incident drill ──► response evidence
-                       │
-                       ▼
-                response-link statement
+assessment manifest SHA-256 ──┐
+                              ├── response-link statement
+response evidence SHA-256 ────┘
 ```
 
-This is the strongest `Respond` story in the demo: the project distinguishes a written response procedure from an observed containment/revocation postcondition.
+The original assessment is never rewritten after containment. `response-link-verify` recomputes both digests, validates the assessment bundle, checks the run ID and trace head, re-verifies response claims, and fails on mismatch.
+
+## 4:25–4:45 — Optional: show Docker audit correlation
+
+Only use this section when running with Docker AI Governance audit delivery:
+
+```bash
+make interview-demo-mcp
+```
+
+The lab generates a deterministic run-scoped hostname under `.correlation.invalid` and performs one bounded network attempt from the exact sandbox. It then looks for that marker in finalized Docker audit `resource_id` evidence.
+
+Possible outputs are deliberately graded:
+
+```text
+exact-marker
+pending-finalization
+single-daemon-session
+ambiguous-multi-session
+no-observed-correlation
+```
+
+Only `exact-marker` means the marker was actually observed in the Docker audit resource.
+
+If finalized JSONL was not yet available during the demo, the exact same immutable agent session can be re-analyzed later without rerunning the agent:
+
+```bash
+make audit-correlate-latest
+```
+
+To use it as an exact-evidence gate:
+
+```bash
+make audit-correlate-exact
+```
+
+See [`AUDIT_CORRELATION.md`](AUDIT_CORRELATION.md).
 
 ## 4:45–5:00 — Close with the CXE-T angle
 
-> I built this as a reusable customer PoC rather than a one-off demo: success criteria, explicit claims boundaries, evidence collection, repeatable validation, a real response drill and a path for implementation feedback upstream. The interesting part to me is turning a recurring customer architecture question into an asset that can be reused and improved.
+> I built this as a reusable customer PoC rather than a one-off demo: success criteria, explicit claims boundaries, live architecture validation, reproducible evidence, response testing and a path for implementation feedback upstream. The part that interests me most is taking a recurring customer architecture question and turning it into an asset that can be reused, challenged and improved.
 
-Then stop and let the interviewer choose which area to drill into.
+Then stop. Let the interviewer choose whether to drill into Docker Sandboxes, MCP, evidence integrity, policy design, auditability or the customer PoC model.
 
 ## Do not overclaim
 
@@ -154,6 +235,7 @@ Do not say:
 - "MCP Gateway proves authorization";
 - "the evidence is tamper-proof";
 - "the in-toto-style statement is signed";
+- "one Docker audit_session_id proves task-level causality";
 - "removing a sandbox credential binding invalidates the upstream provider token".
 
 Prefer:
@@ -161,6 +243,7 @@ Prefer:
 - implementation assessment;
 - observed evidence;
 - partial coverage;
+- exact-marker vs bounded correlation;
 - tamper-evident bundle;
 - unsigned run attestation;
 - scoped credential-binding revocation;
