@@ -7,6 +7,7 @@ import platform
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -67,8 +68,17 @@ def _iter_jsonl_files(root: Path) -> Iterable[Path]:
         return
     if not root.exists() or not root.is_dir():
         return
+    # .tmp files are intentionally ignored: Docker documents them as incomplete.
     files = [p for p in root.rglob("*.jsonl") if p.is_file()]
     yield from sorted(files, key=lambda p: (p.stat().st_mtime, str(p)))
+
+
+def _parse_timestamp(value: str) -> datetime:
+    normalized = value.strip().replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def load_audit_records(
@@ -76,6 +86,8 @@ def load_audit_records(
     *,
     audit_session_id: str | None = None,
     agent: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
     max_records: int = 2000,
     redaction_salt: str = "agent-baseline-evidence-lab",
 ) -> tuple[list[dict[str, Any]], AuditIngestSummary]:
@@ -104,6 +116,19 @@ def load_audit_records(
                         continue
                     if agent and str(record.get("agent", "")) != agent:
                         continue
+                    timestamp = str(record.get("timestamp", ""))
+                    if (since or until) and timestamp:
+                        try:
+                            observed_time = _parse_timestamp(timestamp)
+                            since_time = _parse_timestamp(since) if since else None
+                            until_time = _parse_timestamp(until) if until else None
+                        except ValueError:
+                            parse_errors += 1
+                            continue
+                        if since_time and observed_time < since_time:
+                            continue
+                        if until_time and observed_time > until_time:
+                            continue
                     selected_queue.append(redact_record(record, redaction_salt))
         except (OSError, UnicodeError):
             parse_errors += 1
@@ -124,16 +149,12 @@ def load_audit_records(
         files_scanned=len(files),
         records_seen=records_seen,
         records_selected=len(selected),
-        audit_session_ids=sorted(
-            {str(r.get("audit_session_id")) for r in selected if r.get("audit_session_id")}
-        ),
+        audit_session_ids=sorted({str(r.get("audit_session_id")) for r in selected if r.get("audit_session_id")}),
         categories=counts("category"),
         decisions=counts("decision"),
         action_types=counts("action_type"),
         agents=sorted({str(r.get("agent")) for r in selected if r.get("agent")}),
-        schema_versions=sorted(
-            {str(r.get("schema_version")) for r in selected if r.get("schema_version")}
-        ),
+        schema_versions=sorted({str(r.get("schema_version")) for r in selected if r.get("schema_version")}),
         parse_errors=parse_errors,
     )
     return selected, summary

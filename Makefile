@@ -1,4 +1,5 @@
-.PHONY: install test lint preflight baseline-sync assess demo verify audit-summary sandbox-create sandbox-run sandbox-shell sandbox-rm
+.PHONY: install test lint preflight baseline-sync assess demo verify audit-summary \
+	live-dry-run live-demo live-demo-mcp mcp-register-dhi sandbox-create sandbox-run sandbox-shell sandbox-rm
 
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
@@ -35,8 +36,22 @@ verify:
 audit-summary:
 	$(ABL) audit-summary
 
-# Creates a detached Codex sandbox with a deliberately denied canary destination.
-# The deny is sandbox-scoped and does not modify global policy.
+# CI-safe proof that the live-run capsule is metadata-only and internally verifiable.
+live-dry-run:
+	$(ABL) live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess
+
+# Community path: real Codex task in a disposable Docker Sandbox workspace.
+live-demo:
+	$(ABL) live-run --config examples/agent.yaml --task examples/task.md --assess
+
+# Full MCP path. Register the public Docker Hardened Images MCP server once first.
+mcp-register-dhi:
+	sbx mcp add dhi --url https://dhi.io/mcp
+
+live-demo-mcp:
+	$(ABL) live-run --config examples/agent-mcp.yaml --task examples/task-mcp.md --assess --with-docker-audit
+
+# Lower-level sandbox helpers retained for manual exploration.
 sandbox-create:
 	sbx create --name abl-demo --deny-network exfiltration.invalid codex "$(CURDIR)/sample-app"
 

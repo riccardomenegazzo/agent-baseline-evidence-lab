@@ -13,6 +13,7 @@ from .catalog import CONTROL_BY_ID, OUTCOME_NAMES
 from .config import ConfigError
 from .engine import run_assessment
 from .evidence import verify_bundle
+from .live_run import cleanup_sandbox, run_agent_task
 from .models import Status
 
 
@@ -79,7 +80,7 @@ def cmd_preflight(args) -> int:
 def cmd_sync(args) -> int:
     try:
         lock = sync(args.url, Path(args.cache))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- CLI boundary reports sync failures cleanly
         print(f"baseline sync failed: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(lock, indent=2))
@@ -121,6 +122,63 @@ def cmd_audit_summary(args) -> int:
     return 0
 
 
+def cmd_live_run(args) -> int:
+    try:
+        live = run_agent_task(
+            args.config,
+            args.task,
+            output_root=args.output,
+            timeout=args.timeout,
+            dry_run=args.dry_run,
+            capture_output=args.capture_output,
+            enable_audit=args.with_docker_audit,
+        )
+    except (ConfigError, ValueError) as exc:
+        print(f"live-run configuration error: {exc}", file=sys.stderr)
+        return 2
+
+    print("AGENT RUN CAPSULE")
+    print(f"  session:   {live.session_id}")
+    print(f"  sandbox:   {live.sandbox_name}")
+    print(f"  workspace: {live.workspace}")
+    print(f"  evidence:  {live.session_dir}")
+    print(f"  executed:  {live.executed}")
+    if live.returncode is not None:
+        print(f"  returncode:{live.returncode}")
+
+    assessment_rc = 0
+    if args.assess:
+        try:
+            report, json_path, html_path = run_assessment(
+                live.config_for_assessment,
+                args.output,
+            )
+        except ConfigError as exc:
+            print(f"assessment configuration error: {exc}", file=sys.stderr)
+            assessment_rc = 2
+        else:
+            print_report(report)
+            print(f"\nJSON report: {json_path}")
+            print(f"HTML report: {html_path}")
+            assessment_rc = (
+                1
+                if any(r.status in (Status.FAIL, Status.ERROR) for r in report.results)
+                else 0
+            )
+
+    if live.executed and not args.keep_sandbox:
+        cleanup = cleanup_sandbox(live.sandbox_name)
+        if not cleanup.ok:
+            print(
+                f"warning: failed to remove sandbox {live.sandbox_name}: {cleanup.stderr}",
+                file=sys.stderr,
+            )
+
+    if live.executed and live.returncode not in (None, 0):
+        return 1
+    return assessment_rc
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="abl", description="Agent Baseline Evidence Lab")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -144,12 +202,42 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--expected-trace-head", default=None, help="optional externally pinned trace head hash")
     verify.set_defaults(func=cmd_verify)
 
-    audit = sub.add_parser("audit-summary", help="summarize Docker AI Governance local JSONL audit records without persisting raw identity fields")
-    audit.add_argument("--path", default=None, help="audit directory or .jsonl file; defaults to Docker's OS-specific local path")
+    audit = sub.add_parser(
+        "audit-summary",
+        help="summarize Docker AI Governance local JSONL audit records without raw identity fields",
+    )
+    audit.add_argument(
+        "--path",
+        default=None,
+        help="audit directory or .jsonl file; defaults to Docker's OS-specific local path",
+    )
     audit.add_argument("--audit-session-id", default=None)
     audit.add_argument("--agent", default=None)
     audit.add_argument("--max-records", type=int, default=2000)
     audit.set_defaults(func=cmd_audit_summary)
+
+    live = sub.add_parser(
+        "live-run",
+        help="run a real coding-agent task in a disposable Docker Sandbox workspace",
+    )
+    live.add_argument("--config", default="examples/agent.yaml")
+    live.add_argument("--task", default="examples/task.md")
+    live.add_argument("--output", default=".")
+    live.add_argument("--timeout", type=int, default=900)
+    live.add_argument("--assess", action="store_true", help="assess the live workspace before cleanup")
+    live.add_argument("--dry-run", action="store_true", help="build and verify the capsule without invoking sbx")
+    live.add_argument(
+        "--capture-output",
+        action="store_true",
+        help="persist raw agent stdout/stderr; off by default for data minimization",
+    )
+    live.add_argument(
+        "--with-docker-audit",
+        action="store_true",
+        help="ingest finalized local Docker AI Governance audit records in the run time window",
+    )
+    live.add_argument("--keep-sandbox", action="store_true")
+    live.set_defaults(func=cmd_live_run)
     return parser
 
 

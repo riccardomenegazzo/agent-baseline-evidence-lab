@@ -7,8 +7,9 @@ from pathlib import Path
 from .audit import load_audit_records, normalized_result
 from .catalog import CONTROLS
 from .config import get_path, load_config
-from .evidence import EvidenceStore, sha256_file
 from .evaluators import evaluate
+from .evidence import EvidenceStore, sha256_file
+from .live_run import load_agent_run
 from .models import RunReport
 from .report import write_html_report, write_json_report
 from .trace import TraceLedger
@@ -57,6 +58,64 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
         },
     )
 
+    agent_run_cfg = get_path(cfg, "assessment.agent_run", {})
+    if isinstance(agent_run_cfg, dict) and agent_run_cfg.get("path"):
+        session, verification = load_agent_run(agent_run_cfg["path"])
+        run_ev = store.write_json(
+            "observations/agent-run.json",
+            {"session": session, "verification": verification},
+            "Metadata-only agent execution capsule imported into this assessment.",
+        )
+        ctx["agent_run"] = session
+        ctx["agent_run_verification"] = verification
+        ctx["agent_run_evidence"] = run_ev
+        execution = session.get("execution", {})
+        trace.append(
+            "agent.task.started",
+            actor=str(session.get("agent", "unknown-agent")),
+            action="execute-task",
+            target=str(session.get("workspace", "")),
+            task_id=str(session.get("task_id", "")),
+            result="started",
+            attributes={
+                "agent_session_id": session.get("session_id"),
+                "sandbox": session.get("sandbox_name"),
+                "model": session.get("agent"),
+                "prompt_sha256": session.get("task", {}).get("sha256"),
+                "source": "agent-run-capsule",
+            },
+        )
+        attempted = execution.get("attempted") is True
+        trace.append(
+            "agent.task.completed",
+            actor=str(session.get("agent", "unknown-agent")),
+            action="execute-task",
+            target=str(session.get("workspace", "")),
+            task_id=str(session.get("task_id", "")),
+            decision=(
+                "accept" if attempted and execution.get("returncode") == 0
+                else "reject" if attempted
+                else "not-executed"
+            ),
+            result=(
+                "success" if attempted and execution.get("returncode") == 0
+                else "failure" if attempted
+                else "not-executed"
+            ),
+            attributes={
+                "agent_session_id": session.get("session_id"),
+                "sandbox": session.get("sandbox_name"),
+                "model": session.get("agent"),
+                "returncode": execution.get("returncode"),
+                "stdout_sha256": execution.get("stdout_sha256"),
+                "stderr_sha256": execution.get("stderr_sha256"),
+                "workspace_before_sha256": session.get("workspace_before", {}).get("root_sha256"),
+                "workspace_after_sha256": session.get("workspace_after", {}).get("root_sha256"),
+                "changed_paths": session.get("changes", {}),
+                "source": "agent-run-capsule",
+            },
+        )
+
     results_by_id = {}
     for control in CONTROLS:
         if control.id in TRACE_DEPENDENT_CONTROLS:
@@ -81,6 +140,8 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
             audit_cfg.get("path") or None,
             audit_session_id=audit_cfg.get("audit_session_id") or None,
             agent=audit_cfg.get("agent") or None,
+            since=audit_cfg.get("since") or None,
+            until=audit_cfg.get("until") or None,
             max_records=int(audit_cfg.get("max_records", 2000)),
             redaction_salt=run_id,
         )
@@ -104,6 +165,7 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
                     "category": record.get("category"),
                     "schema_version": record.get("schema_version"),
                     "agent": record.get("agent"),
+                    "action_type": record.get("action_type"),
                     "source_timestamp": record.get("timestamp"),
                     "source": "docker-ai-governance-local-audit",
                 },
@@ -142,6 +204,11 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
             "trace_head_sha256": trace.head_hash,
             "trace_event_count": trace.sequence,
             "docker_audit": ctx.get("docker_audit_summary", {"enabled": False}),
+            "agent_run": {
+                "session_id": ctx.get("agent_run", {}).get("session_id"),
+                "executed": ctx.get("agent_run", {}).get("execution", {}).get("attempted", False),
+                "manifest_valid": ctx.get("agent_run_verification", {}).get("manifest_valid"),
+            },
         },
     )
 

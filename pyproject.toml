@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-baseline-evidence-lab"
-version = "0.3.0"
+version = "0.4.0"
 description = "Evidence-driven implementation assessment for the Agent Baseline v1.0-draft, with Docker Sandboxes adapters."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -35,13 +35,3 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-
-[tool.ruff.lint]
-# Semantic/bug-oriented gate. Import ordering is intentionally left to editor tooling.
-select = ["E4", "E7", "E9", "F", "UP", "B", "BLE", "SIM", "PIE", "RUF"]
-
-[tool.ruff.lint.per-file-ignores]
-# Evaluators are an isolation boundary: unexpected plugin failures become ERROR results.
-# The cleanup pattern is kept local here to avoid changing the mature probe function in a lint-only patch.
-"src/agent_baseline_lab/evaluators.py" = ["BLE001", "SIM102", "SIM105", "UP035"]
-"src/agent_baseline_lab/cli.py" = ["BLE001"]

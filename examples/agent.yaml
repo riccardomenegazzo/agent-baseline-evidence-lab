@@ -64,6 +64,8 @@ sandbox:
       - github.com
     required_denies:
       - exfiltration.invalid
+  mcp:
+    static_servers: []
   capability_profile:
     id: coding-agent-moderate-v1
     version: "1.0"
@@ -102,8 +104,6 @@ assessment:
         - approval_guard
         - local_stdio_forbid
 
-  # Optional: requires Docker AI Governance local audit delivery. When enabled,
-  # identity/host fields are pseudonymized before evidence is persisted.
   docker_audit:
     enabled: false
     max_records: 2000

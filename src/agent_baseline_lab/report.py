@@ -71,6 +71,8 @@ def write_html_report(report: RunReport, path: Path) -> None:
 
     audit = report.metadata.get("docker_audit", {}) if isinstance(report.metadata, dict) else {}
     audit_count = audit.get("records_selected", 0) if isinstance(audit, dict) else 0
+    agent_run = report.metadata.get("agent_run", {}) if isinstance(report.metadata, dict) else {}
+    agent_run_state = "EXECUTED" if agent_run.get("executed") else "NOT EXECUTED"
     trace_head = str(report.metadata.get("trace_head_sha256", ""))
     manifest_hash = str(report.metadata.get("evidence_manifest_sha256", ""))
     trust_cards = f"""
@@ -78,6 +80,7 @@ def write_html_report(report: RunReport, path: Path) -> None:
       <div class="trust-card"><span>Trace head</span><code>{html.escape(trace_head[:16] + ('…' if trace_head else ''))}</code></div>
       <div class="trust-card"><span>Manifest</span><code>{html.escape(manifest_hash[:16] + ('…' if manifest_hash else ''))}</code></div>
       <div class="trust-card"><span>Docker audit records</span><strong>{html.escape(str(audit_count))}</strong></div>
+      <div class="trust-card"><span>Agent run</span><strong>{html.escape(agent_run_state)}</strong></div>
     """
 
     doc = f"""<!doctype html>
