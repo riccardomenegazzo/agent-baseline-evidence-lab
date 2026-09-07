@@ -1,7 +1,7 @@
 .PHONY: install test lint preflight baseline-sync assess demo verify audit-summary \
 	live-dry-run live-demo live-demo-mcp mcp-register-dhi sandbox-create sandbox-run sandbox-shell sandbox-rm \
 	response-drill response-drill-full response-drill-dry-run response-link response-link-verify \
-	interview-demo interview-demo-mcp interview-demo-dry-run
+	interview-demo interview-demo-mcp interview-demo-dry-run audit-correlate-latest audit-correlate-exact
 
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
@@ -38,6 +38,19 @@ verify:
 audit-summary:
 	$(ABL) audit-summary
 
+# Re-analyze finalized Docker AI Governance audit JSONL for the latest live agent session.
+# Diagnostic mode reports exact/pending/ambiguous strength without failing on non-exact evidence.
+audit-correlate-latest:
+	@latest=$$(ls -1dt agent-runs/agent-* 2>/dev/null | head -1); \
+	if [ -z "$$latest" ]; then echo "No agent run found"; exit 1; fi; \
+	$(PYTHON) -m agent_baseline_lab.audit_correlation "$$latest/session.json"
+
+# Same analysis, but act as a gate: exit non-zero unless resource_id contains the run marker.
+audit-correlate-exact:
+	@latest=$$(ls -1dt agent-runs/agent-* 2>/dev/null | head -1); \
+	if [ -z "$$latest" ]; then echo "No agent run found"; exit 1; fi; \
+	$(PYTHON) -m agent_baseline_lab.audit_correlation "$$latest/session.json" --require-exact
+
 # CI-safe proof that the live-run capsule is metadata-only and internally verifiable.
 live-dry-run:
 	$(ABL) live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess
@@ -61,6 +74,7 @@ interview-demo:
 		--config examples/agent.yaml --task examples/task.md --cleanup
 
 # MCP + Docker AI Governance audit variant. Register DHI first with `make mcp-register-dhi`.
+# A run-scoped .invalid network marker is attempted to support empirical audit correlation.
 interview-demo-mcp:
 	$(PYTHON) -m agent_baseline_lab.interview_demo \
 		--config examples/agent-mcp.yaml --task examples/task-mcp.md \
