@@ -7,6 +7,7 @@ from pathlib import Path
 from .audit import load_audit_records, normalized_result
 from .catalog import CONTROLS
 from .config import get_path, load_config
+from .correlation import correlate_tool_events
 from .evaluators import evaluate
 from .evidence import EvidenceStore, sha256_file
 from .live_run import load_agent_run
@@ -170,8 +171,49 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
                     "source": "docker-ai-governance-local-audit",
                 },
             )
+
+        correlation = correlate_tool_events(
+            audit_records,
+            max_gap_seconds=float(audit_cfg.get("mcp_correlation_window_seconds", 30.0)),
+        )
+        correlation_ev = store.write_json(
+            "observations/docker-mcp-correlation.json",
+            correlation.to_dict(),
+            (
+                "Conservative pairing of Docker MCP tool-invocation evaluations and "
+                "tool-execution outcomes. Pairing is explicitly heuristic because the public "
+                "record schema does not document a per-action correlation identifier."
+            ),
+        )
+        correlation_result = (
+            "complete"
+            if correlation.complete
+            else "gaps"
+            if correlation.unmatched_allowed or correlation.orphan_executions
+            else "no-executable-pairs"
+        )
+        trace.append(
+            "docker.mcp-correlation",
+            actor="agent-baseline-evidence-lab",
+            action="correlate-mcp-evaluation-execution",
+            target="docker-ai-governance-audit",
+            result=correlation_result,
+            task_id=str(get_path(cfg, "assessment.task_id", "")),
+            attributes={
+                "paired_allowed": correlation.paired_allowed,
+                "terminal_allowed": correlation.terminal_allowed,
+                "terminal_blocked": correlation.terminal_blocked,
+                "approval_required": correlation.approval_required,
+                "unmatched_allowed": len(correlation.unmatched_allowed),
+                "orphan_executions": len(correlation.orphan_executions),
+                "coverage": correlation.coverage,
+                "confidence": "heuristic",
+            },
+        )
         ctx["docker_audit_summary"] = audit_summary.to_dict()
         ctx["docker_audit_evidence"] = audit_ev
+        ctx["mcp_correlation_summary"] = correlation.to_dict()
+        ctx["mcp_correlation_evidence"] = correlation_ev
 
     # Evaluate telemetry/integrity controls only after the rest of the run has produced evidence.
     for control in CONTROLS:
@@ -204,6 +246,7 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
             "trace_head_sha256": trace.head_hash,
             "trace_event_count": trace.sequence,
             "docker_audit": ctx.get("docker_audit_summary", {"enabled": False}),
+            "mcp_correlation": ctx.get("mcp_correlation_summary", {"available": False}),
             "agent_run": {
                 "session_id": ctx.get("agent_run", {}).get("session_id"),
                 "executed": ctx.get("agent_run", {}).get("execution", {}).get("attempted", False),
