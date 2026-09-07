@@ -22,6 +22,23 @@ jobs:
       - run: ruff check src tests scripts sample-app
       - run: pytest
       - run: python -m unittest discover -s sample-app/tests -v
+      - name: Correlate representative Docker MCP audit records
+        run: |
+          abl-mcp-correlate \
+            --path tests/fixtures/docker-audit-mcp.jsonl \
+            --audit-session-id session-demo \
+            --agent codex \
+            --strict \
+            --output /tmp/mcp-correlation.json
+          python - <<'PY'
+          import json
+          report = json.load(open('/tmp/mcp-correlation.json'))['correlation']
+          assert report['paired_allowed'] == 1
+          assert report['terminal_blocked'] == 1
+          assert report['coverage'] == 1.0
+          assert report['complete'] is True
+          assert report['pairs'][0]['confidence'] == 'heuristic'
+          PY
       - name: Exercise metadata-only live-run capsule
         run: abl live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess
       - name: Run offline-safe assessment
