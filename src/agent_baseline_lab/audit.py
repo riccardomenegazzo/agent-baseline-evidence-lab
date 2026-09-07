@@ -18,6 +18,7 @@ SENSITIVE_FIELDS = {"username", "user_email", "org_id", "org_name", "hostname"}
 class AuditIngestSummary:
     source_path: str
     files_scanned: int
+    in_progress_files: int
     records_seen: int
     records_selected: int
     audit_session_ids: list[str]
@@ -73,6 +74,12 @@ def _iter_jsonl_files(root: Path) -> Iterable[Path]:
     yield from sorted(files, key=lambda p: (p.stat().st_mtime, str(p)))
 
 
+def _count_in_progress_files(root: Path) -> int:
+    if not root.exists() or not root.is_dir():
+        return 0
+    return sum(1 for path in root.rglob("*.tmp") if path.is_file())
+
+
 def _parse_timestamp(value: str) -> datetime:
     normalized = value.strip().replace("Z", "+00:00")
     parsed = datetime.fromisoformat(normalized)
@@ -93,6 +100,7 @@ def load_audit_records(
 ) -> tuple[list[dict[str, Any]], AuditIngestSummary]:
     root = Path(source).expanduser() if source else default_audit_dir()
     files = list(_iter_jsonl_files(root))
+    in_progress_files = _count_in_progress_files(root)
     selected_queue: deque[dict[str, Any]] = deque(maxlen=max(1, max_records))
     records_seen = 0
     parse_errors = 0
@@ -147,6 +155,7 @@ def load_audit_records(
     summary = AuditIngestSummary(
         source_path=str(root),
         files_scanned=len(files),
+        in_progress_files=in_progress_files,
         records_seen=records_seen,
         records_selected=len(selected),
         audit_session_ids=sorted({str(r.get("audit_session_id")) for r in selected if r.get("audit_session_id")}),
@@ -175,13 +184,13 @@ def normalized_result(record: dict[str, Any]) -> str:
 
 
 def normalized_event_types(record: dict[str, Any]) -> list[str]:
-    """Map Docker audit action types to stable, product-neutral trace event types.
+    """Map one Docker audit record to generic and semantic trace events.
 
-    Evaluation records intentionally yield both a semantic activity event and
-    ``policy.decision``. This preserves the fact that, for example, a governed
-    MCP tool invocation is simultaneously a tool event and an authorization
-    decision. The shared Docker ``audit_event_id`` keeps both trace entries
-    attributable to one source record.
+    Every recognized record retains a generic ``docker.audit`` view for source
+    attribution while also producing product-neutral semantic events such as
+    ``mcp.tool`` or ``network.egress``. Evaluation records additionally produce
+    ``policy.decision``. All derived events carry the same Docker
+    ``audit_event_id`` in the engine, preserving their common provenance.
     """
     action_type = str(record.get("action_type", "")).lower()
     category = str(record.get("category", ""))
@@ -205,6 +214,8 @@ def normalized_event_types(record: dict[str, Any]) -> list[str]:
     }.get(action_type, "docker.audit")
 
     events = [semantic]
-    if category == "AUDIT_CATEGORY_EVALUATION" and semantic != "policy.decision":
+    if category == "AUDIT_CATEGORY_EVALUATION":
         events.append("policy.decision")
-    return events
+    if semantic != "docker.audit":
+        events.append("docker.audit")
+    return list(dict.fromkeys(events))
