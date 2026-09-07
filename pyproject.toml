@@ -35,3 +35,12 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# Semantic/bug-oriented gate. Import ordering is intentionally left to editor tooling.
+select = ["E4", "E7", "E9", "F", "UP", "B", "BLE", "SIM", "PIE", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# The evaluator boundary deliberately converts any plugin/evaluator exception to ERROR.
+"src/agent_baseline_lab/evaluators.py" = ["BLE001", "SIM102", "UP035"]
+"src/agent_baseline_lab/cli.py" = ["BLE001"]

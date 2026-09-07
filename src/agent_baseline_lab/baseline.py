@@ -15,7 +15,7 @@ DEFAULT_URL = "https://raw.githubusercontent.com/agentbaseline/agentbaseline/mai
 
 def sync(url: str, cache_dir: Path) -> dict:
     cache_dir.mkdir(parents=True, exist_ok=True)
-    with urllib.request.urlopen(url, timeout=15) as response:  # noqa: S310 - explicit trusted default URL
+    with urllib.request.urlopen(url, timeout=15) as response:
         raw = response.read()
     parsed = yaml.safe_load(raw)
     ids = [c.get("id") for c in parsed.get("controls", [])]

@@ -5,9 +5,10 @@ import json
 import os
 import platform
 from collections import deque
-from dataclasses import dataclass, asdict
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 SENSITIVE_FIELDS = {"username", "user_email", "org_id", "org_name", "hostname"}
 
@@ -66,7 +67,6 @@ def _iter_jsonl_files(root: Path) -> Iterable[Path]:
         return
     if not root.exists() or not root.is_dir():
         return
-    # .tmp files are intentionally ignored: Docker documents them as incomplete.
     files = [p for p in root.rglob("*.jsonl") if p.is_file()]
     yield from sorted(files, key=lambda p: (p.stat().st_mtime, str(p)))
 
@@ -81,7 +81,7 @@ def load_audit_records(
 ) -> tuple[list[dict[str, Any]], AuditIngestSummary]:
     root = Path(source).expanduser() if source else default_audit_dir()
     files = list(_iter_jsonl_files(root))
-    selected_queue: deque[dict[str, Any]] = deque(maxlen=max_records)
+    selected_queue: deque[dict[str, Any]] = deque(maxlen=max(1, max_records))
     records_seen = 0
     parse_errors = 0
 
@@ -124,12 +124,16 @@ def load_audit_records(
         files_scanned=len(files),
         records_seen=records_seen,
         records_selected=len(selected),
-        audit_session_ids=sorted({str(r.get("audit_session_id")) for r in selected if r.get("audit_session_id")}),
+        audit_session_ids=sorted(
+            {str(r.get("audit_session_id")) for r in selected if r.get("audit_session_id")}
+        ),
         categories=counts("category"),
         decisions=counts("decision"),
         action_types=counts("action_type"),
         agents=sorted({str(r.get("agent")) for r in selected if r.get("agent")}),
-        schema_versions=sorted({str(r.get("schema_version")) for r in selected if r.get("schema_version")}),
+        schema_versions=sorted(
+            {str(r.get("schema_version")) for r in selected if r.get("schema_version")}
+        ),
         parse_errors=parse_errors,
     )
     return selected, summary
@@ -138,9 +142,9 @@ def load_audit_records(
 def normalized_result(record: dict[str, Any]) -> str:
     category = str(record.get("category", ""))
     decision = str(record.get("decision", ""))
-    if decision.endswith("_DENY") or decision.endswith("_REJECTED"):
+    if decision.endswith(("_DENY", "_REJECTED")):
         return "denied"
-    if decision.endswith("_ALLOW") or decision.endswith("_APPROVED"):
+    if decision.endswith(("_ALLOW", "_APPROVED")):
         return "allowed"
     if decision.endswith("_APPROVAL_REQUIRED"):
         return "approval-required"

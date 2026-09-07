@@ -11,7 +11,7 @@ def route(path: str) -> tuple[int, dict[str, str]]:
 
 
 class Handler(BaseHTTPRequestHandler):
-    def do_GET(self) -> None:  # noqa: N802 - stdlib API
+    def do_GET(self) -> None:
         status, payload = route(self.path)
         raw = json.dumps(payload).encode()
         self.send_response(status)
