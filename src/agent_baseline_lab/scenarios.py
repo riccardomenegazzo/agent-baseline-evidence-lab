@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -69,10 +70,8 @@ def _host_canary_scenario(scenario: dict[str, Any], cfg: dict[str, Any], ctx: di
         canary.write_text("host-only\n", encoding="utf-8")
         probe = run(["sbx", "exec", sandbox, "sh", "-lc", f"test ! -e {canary}"])
     finally:
-        try:
+        with suppress(FileNotFoundError):
             os.unlink(canary)
-        except FileNotFoundError:
-            pass
     matched = probe.ok
     _trace(ctx, "scenario.host-canary", scenario_id=sid, action="host-path-visibility", target=str(canary), decision="deny", result="pass" if matched else "fail", attributes={"sandbox": sandbox, "returncode": probe.returncode})
     return {
