@@ -172,3 +172,39 @@ def normalized_result(record: dict[str, Any]) -> str:
     if category == "AUDIT_CATEGORY_EXECUTION":
         return "executed"
     return "observed"
+
+
+def normalized_event_types(record: dict[str, Any]) -> list[str]:
+    """Map Docker audit action types to stable, product-neutral trace event types.
+
+    Evaluation records intentionally yield both a semantic activity event and
+    ``policy.decision``. This preserves the fact that, for example, a governed
+    MCP tool invocation is simultaneously a tool event and an authorization
+    decision. The shared Docker ``audit_event_id`` keeps both trace entries
+    attributable to one source record.
+    """
+    action_type = str(record.get("action_type", "")).lower()
+    category = str(record.get("category", ""))
+
+    semantic = {
+        "tool_invocation": "mcp.tool",
+        "tool_execution": "mcp.tool",
+        "resource_read": "mcp.resource",
+        "resource_execution": "mcp.resource",
+        "server_registration": "mcp.registration",
+        "prompt": "mcp.prompt",
+        "network_egress": "network.egress",
+        "network_execution": "network.egress",
+        "filesystem_mount": "filesystem.access",
+        "filesystem_execution": "filesystem.access",
+        "session": "sandbox.session",
+        "policy_sync": "policy.sync",
+        "policy_action": "policy.action",
+        "pii_detection": "data.pii-detection",
+        "c_score_report": "governance.c-score",
+    }.get(action_type, "docker.audit")
+
+    events = [semantic]
+    if category == "AUDIT_CATEGORY_EVALUATION" and semantic != "policy.decision":
+        events.append("policy.decision")
+    return events
