@@ -124,10 +124,7 @@ def reconcile_files(
     observed_file = Path(observed_path)
     witness = load_witness(witness_file)
     payload = json.loads(observed_file.read_text(encoding="utf-8"))
-    if isinstance(payload, dict):
-        observed = payload.get("observed_event_ids", [])
-    else:
-        observed = payload
+    observed = payload.get("observed_event_ids", []) if isinstance(payload, dict) else payload
     if not isinstance(observed, list) or not all(isinstance(item, str) for item in observed):
         raise ValueError("observed evidence must be a list of event IDs or an object with observed_event_ids")
     result = reconcile_event_ids(
