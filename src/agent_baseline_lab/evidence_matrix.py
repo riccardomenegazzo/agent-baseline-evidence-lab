@@ -145,7 +145,7 @@ def run_verification_matrix(
         coordinated = temp / "coordinated-rewrite"
         _copy_bundle(source, coordinated)
         _rewrite_anchors_after_trace_truncation(coordinated)
-        internal_ok, _, internal_summary = verify_bundle(coordinated)
+        internal_ok, _, _ = verify_bundle(coordinated)
         external_ok, _, _ = verify_bundle(
             coordinated,
             expected_manifest_sha256=original_manifest,
