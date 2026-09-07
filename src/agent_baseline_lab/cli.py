@@ -80,7 +80,7 @@ def cmd_preflight(args) -> int:
 def cmd_sync(args) -> int:
     try:
         lock = sync(args.url, Path(args.cache))
-    except Exception as exc:  # noqa: BLE001 -- CLI boundary reports sync failures cleanly
+    except Exception as exc:
         print(f"baseline sync failed: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(lock, indent=2))
