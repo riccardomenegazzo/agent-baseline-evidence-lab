@@ -11,6 +11,7 @@ from .evaluators import evaluate
 from .evidence import EvidenceStore, sha256_file
 from .live_run import load_agent_run
 from .models import RunReport
+from .provenance import write_run_attestation
 from .report import write_html_report, write_json_report
 from .trace import TraceLedger
 
@@ -215,8 +216,24 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
     provisional = evidence_dir / "assessment.json"
     provisional.write_text(json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
     manifest = store.finalize_manifest()
+    manifest_sha256 = sha256_file(manifest)
     report.metadata["evidence_manifest"] = str(manifest.relative_to(out))
-    report.metadata["evidence_manifest_sha256"] = sha256_file(manifest)
+    report.metadata["evidence_manifest_sha256"] = manifest_sha256
+
+    attestation_path = report_dir / f"{run_id}.attestation.json"
+    attestation_sha256 = write_run_attestation(
+        report,
+        manifest_path=manifest,
+        context=ctx,
+        output_path=attestation_path,
+    )
+    report.metadata["run_attestation"] = {
+        "path": str(attestation_path.relative_to(out)),
+        "sha256": attestation_sha256,
+        "signed": False,
+        "statement_type": "https://in-toto.io/Statement/v1",
+    }
+
     json_path = report_dir / f"{run_id}.json"
     html_path = report_dir / f"{run_id}.html"
     write_json_report(report, json_path)
