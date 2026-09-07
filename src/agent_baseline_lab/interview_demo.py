@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .audit_correlation import analyze_audit_correlation, run_correlation_probe
 from .engine import run_assessment
 from .evidence import sha256_file, verify_bundle
 from .live_run import cleanup_sandbox, run_agent_task
@@ -37,6 +38,11 @@ class InterviewDemoSummary:
     assessment_fail_or_error_count: int
     sandbox_stop_verified: bool
     credential_binding_revocation_verified: bool
+    audit_correlation_requested: bool
+    audit_correlation_probe_attempted: bool
+    audit_correlation_strength: str
+    audit_correlation_exact_marker: bool
+    audit_correlation_report: str
     cleanup_attempted: bool
     cleanup_succeeded: bool | None
 
@@ -70,6 +76,16 @@ def run_interview_demo(
         capture_output=False,
         enable_audit=enable_audit,
     )
+
+    correlation_probe = None
+    correlation_probe_path = root / ".abl" / "correlation" / f"{live.session_id}.probe.json"
+    if enable_audit:
+        correlation_probe = run_correlation_probe(
+            live.sandbox_name,
+            live.session_id,
+            correlation_probe_path,
+            dry_run=dry_run,
+        )
 
     report, assessment_json, assessment_html = run_assessment(
         live.config_for_assessment,
@@ -117,6 +133,46 @@ def run_interview_demo(
         link_verified = True
         link_sha256 = sha256_file(link_path)
 
+    correlation_strength = "not-requested"
+    correlation_exact = False
+    correlation_report = ""
+    if enable_audit and correlation_probe is not None:
+        correlation_report_path = root / "reports" / f"{report.run_id}.audit-correlation.json"
+        correlation_report_path.parent.mkdir(parents=True, exist_ok=True)
+        if dry_run:
+            correlation_strength = "dry-run-no-correlation"
+            correlation_payload = {
+                "schema_version": 1,
+                "probe": correlation_probe.to_dict(),
+                "strength": correlation_strength,
+                "exact_marker_match": False,
+                "claims_boundary": "Dry run performs no network marker action and cannot produce audit correlation evidence.",
+            }
+        else:
+            session_path = Path(live.session_dir) / "session.json"
+            session = json.loads(session_path.read_text(encoding="utf-8"))
+            correlation = analyze_audit_correlation(
+                session_id=live.session_id,
+                marker_host=correlation_probe.marker_host,
+                agent=str(session.get("agent", "")),
+                since=str(session.get("started_at", "")),
+                until=_utc_now(),
+            )
+            correlation_strength = correlation.strength
+            correlation_exact = correlation.exact_marker_match
+            correlation_payload = {
+                "schema_version": 1,
+                "probe": correlation_probe.to_dict(),
+                "probe_sha256": sha256_file(correlation_probe_path),
+                "analysis": correlation.to_dict(),
+                "session_sha256": sha256_file(session_path),
+            }
+        correlation_report_path.write_text(
+            json.dumps(correlation_payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        correlation_report = str(correlation_report_path)
+
     cleanup_attempted = False
     cleanup_succeeded: bool | None = None
     if cleanup and live.executed:
@@ -128,7 +184,7 @@ def run_interview_demo(
         result.status in {Status.FAIL, Status.ERROR} for result in report.results
     )
     summary = InterviewDemoSummary(
-        schema_version=1,
+        schema_version=2,
         started_at=started_at,
         completed_at=_utc_now(),
         session_id=live.session_id,
@@ -147,6 +203,13 @@ def run_interview_demo(
         assessment_fail_or_error_count=fail_or_error,
         sandbox_stop_verified=response.verified_stopped,
         credential_binding_revocation_verified=response.credential_revocation_tested,
+        audit_correlation_requested=enable_audit,
+        audit_correlation_probe_attempted=bool(
+            correlation_probe and correlation_probe.attempted
+        ),
+        audit_correlation_strength=correlation_strength,
+        audit_correlation_exact_marker=correlation_exact,
+        audit_correlation_report=correlation_report,
         cleanup_attempted=cleanup_attempted,
         cleanup_succeeded=cleanup_succeeded,
     )
@@ -203,6 +266,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  response link:       {summary.response_link_verified}")
     if summary.response_link_sha256:
         print(f"  response link SHA:   {summary.response_link_sha256}")
+    if summary.audit_correlation_requested:
+        print(f"  audit correlation:   {summary.audit_correlation_strength}")
+        print(f"  exact audit marker:  {summary.audit_correlation_exact_marker}")
     if summary.cleanup_attempted:
         print(f"  cleanup succeeded:   {summary.cleanup_succeeded}")
     print(f"  HTML report:         {summary.assessment_html}")
