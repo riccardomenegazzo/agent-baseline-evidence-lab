@@ -8,7 +8,7 @@ This demo is designed for a technical manager. It prioritizes the problem, evide
 
 Emphasize that the project is a community implementation experiment, not an official Docker or Agent Baseline conformance tool.
 
-## 0:30–1:15 — Show the architecture
+## 0:30–1:10 — Show the architecture
 
 Open the README architecture diagram and explain the evidence sources:
 
@@ -33,7 +33,7 @@ hash-chained trace + evidence manifest
 
 The key point is that the engine never treats product presence as proof of a control.
 
-## 1:15–2:20 — Run a real coding-agent task
+## 1:10–2:10 — Run a real coding-agent task
 
 Preflight:
 
@@ -62,7 +62,7 @@ Explain what is captured by default:
 - optional Docker AI Governance audit metadata;
 - resulting Agent Baseline assessment.
 
-## 2:20–3:15 — Show evidence, not a green dashboard
+## 2:10–2:55 — Show evidence, not a green dashboard
 
 Open the generated HTML report.
 
@@ -74,7 +74,7 @@ Recommended example:
 
 This is the project's most important credibility rule.
 
-## 3:15–4:10 — Verify integrity and provenance
+## 2:55–3:40 — Verify integrity and provenance
 
 Verify the exported evidence bundle:
 
@@ -96,7 +96,7 @@ Explain the trust boundary:
 
 If useful, mention that this implementation experience maps directly to the concern raised in Agent Baseline issue #26 around independently verifiable evidence.
 
-## 4:10–4:45 — Show the adversarial mindset
+## 3:40–4:15 — Show the adversarial mindset
 
 Point to the scenario runner and negative provenance test:
 
@@ -107,9 +107,41 @@ Point to the scenario runner and negative provenance test:
 
 The point is not offensive security. It is that each claim has an expected failure condition.
 
+## 4:15–4:45 — Show response as evidence, not a playbook
+
+Only do this against the disposable `abl-demo` sandbox.
+
+```bash
+make response-drill-full
+make response-link
+```
+
+Explain the two independent postconditions:
+
+```text
+sandbox stop                              VERIFIED
+sandbox-scoped credential binding removal VERIFIED
+upstream provider token invalidation       NOT CLAIMED
+```
+
+The full drill creates a unique disposable custom-secret binding only for `abl-demo`, observes it, removes it, observes that it is gone, and then verifies that only `abl-demo` reaches a stopped state. No real OpenAI, GitHub, or other provider credential is modified.
+
+`make response-link` does **not** rewrite the original assessment bundle. It creates a third unsigned statement whose subjects are the SHA-256 digest of the original assessment manifest and the SHA-256 digest of the response artifact. This gives a clean evidence timeline:
+
+```text
+assessment run ──► immutable bundle
+                       │
+incident drill ──► response evidence
+                       │
+                       ▼
+                response-link statement
+```
+
+This is the strongest `Respond` story in the demo: the project distinguishes a written response procedure from an observed containment/revocation postcondition.
+
 ## 4:45–5:00 — Close with the CXE-T angle
 
-> I built this as a reusable customer PoC rather than a one-off demo: success criteria, explicit claims boundaries, evidence collection, repeatable validation and a path for implementation feedback upstream. The interesting part to me is turning a recurring customer architecture question into an asset that can be reused and improved.
+> I built this as a reusable customer PoC rather than a one-off demo: success criteria, explicit claims boundaries, evidence collection, repeatable validation, a real response drill and a path for implementation feedback upstream. The interesting part to me is turning a recurring customer architecture question into an asset that can be reused and improved.
 
 Then stop and let the interviewer choose which area to drill into.
 
@@ -121,7 +153,8 @@ Do not say:
 - "this certifies an agent";
 - "MCP Gateway proves authorization";
 - "the evidence is tamper-proof";
-- "the in-toto-style statement is signed".
+- "the in-toto-style statement is signed";
+- "removing a sandbox credential binding invalidates the upstream provider token".
 
 Prefer:
 
@@ -130,5 +163,6 @@ Prefer:
 - partial coverage;
 - tamper-evident bundle;
 - unsigned run attestation;
+- scoped credential-binding revocation;
 - external trust anchor;
 - reproducible customer PoC.
