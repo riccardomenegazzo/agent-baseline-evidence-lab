@@ -8,7 +8,7 @@ AI-agent security guidance is easy to describe and hard to prove. This lab asks 
 
 > **For this agent, in this environment, during this run: what can we actually prove?**
 
-The project maps the 35 draft Agent Baseline controls to declared state, live Docker Sandboxes probes, executable adversarial scenarios, Docker MCP Cedar-policy analysis, optional Docker AI Governance audit records, artifact checks, and explicit manual gaps. Every run emits a tamper-evident evidence bundle plus JSON/HTML reports.
+The project maps the 35 draft Agent Baseline controls to declared state, live Docker Sandboxes probes, executable adversarial scenarios, Docker MCP Cedar-policy analysis, optional Docker AI Governance audit records, artifact checks, and explicit manual gaps. Every run emits a tamper-evident evidence bundle, JSON/HTML reports, and an unsigned in-toto-style run attestation.
 
 ## Why this is different
 
@@ -45,23 +45,27 @@ A skipped live test is **never** counted as a pass.
 
 - statically analyzes Docker MCP Cedar policy posture;
 - detects broad actionless permits, registration identity binding, tool/resource/prompt scope, approval guards and local-stdio forbids;
-- can ingest Docker AI Governance audit events for observed action attribution;
+- ingests Docker AI Governance audit events for observed action attribution when available;
+- maps Docker MCP evaluations to both `policy.decision` and semantic MCP trace events while retaining the original source-level `docker.audit` event;
 - keeps JIT credentials, delegation attenuation, step-up and proof-of-possession manual until evidence exists.
 
 ### Observe
 
 - creates an append-only, SHA-256 hash-chained normalized trace;
 - joins Docker AI Governance metadata events when local audit delivery is enabled;
+- recognizes observed `tool_invocation` / `tool_execution` as `mcp.tool`, rather than inferring tool use from MCP configuration alone;
 - pseudonymizes username, email, org and hostname before persistence;
-- correlates all lab events by stable run ID;
+- correlates all lab events by stable run ID and preserves Docker `audit_event_id` / `audit_session_id` as source correlation keys;
 - writes a per-file SHA-256 evidence manifest;
-- supports external manifest/trace-head pins during verification.
+- emits an unsigned in-toto-style run attestation binding the evidence manifest to the observed task/runtime facts;
+- supports external hash pins during bundle and attestation verification.
 
 ### Validate
 
 - executes adversarial scenarios, not just a scenario plan;
 - currently supports live host-canary, live network-policy decision and offline MCP-policy-contract scenarios;
-- executes agent-generated artifact tests and Dockerfile security contracts.
+- executes agent-generated artifact tests and Dockerfile security contracts;
+- includes negative provenance tests that deliberately mutate the evidence manifest and require attestation verification to fail.
 
 ### Respond
 
@@ -94,12 +98,13 @@ A skipped live test is **never** counted as a pass.
                          run-scoped evidence
                          SHA-256 file manifest
                                    │
-                       ┌───────────┴───────────┐
-                       ▼                       ▼
-                  JSON report              HTML report
+              ┌────────────────────┼────────────────────┐
+              ▼                    ▼                    ▼
+         JSON report          HTML report       run attestation
+                                                (unsigned)
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DOCKER_EVIDENCE_SOURCES.md`](docs/DOCKER_EVIDENCE_SOURCES.md).
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/DOCKER_EVIDENCE_SOURCES.md`](docs/DOCKER_EVIDENCE_SOURCES.md), and [`docs/RUN_ATTESTATION.md`](docs/RUN_ATTESTATION.md).
 
 ## Five-minute path
 
@@ -122,9 +127,11 @@ make verify
 
 `sandbox-create` adds only a **sandbox-scoped** deny for the canary destination. It does not widen or replace global policy.
 
+For a manager-facing walkthrough, see [`docs/INTERVIEW_DEMO.md`](docs/INTERVIEW_DEMO.md).
+
 ## Real Codex-in-Sandbox execution
 
-The V0.4 live path runs a real coding task in a **disposable copy** of the sample workspace and feeds that exact execution back into the assessment:
+The v0.5 live path runs a real coding task in a **disposable copy** of the sample workspace and feeds that exact execution back into the assessment:
 
 ```bash
 make live-demo
@@ -140,6 +147,8 @@ make live-demo-mcp
 ```
 
 The full configuration uses `policies/mcp/dhi-readonly.cedar`: registration is identity-bound to `https://dhi.io/mcp`, read-only tools are allowed, non-read-only tools are forbidden, local-stdio registration is forbidden, and dynamic gateway expansion is blocked. The Cedar file is **reference policy evidence** until installed and enforced through Docker AI Governance.
+
+When Docker AI Governance audit records are available, the lab distinguishes MCP configuration from **observed MCP activity**: `tool_invocation` and `tool_execution` records are normalized into `mcp.tool` trace events, while evaluation records also produce `policy.decision`. The original Docker event remains represented as `docker.audit`, linked through the same `audit_event_id`.
 
 See [`docs/LIVE_AGENT_RUN.md`](docs/LIVE_AGENT_RUN.md) for the execution, privacy and governance model.
 
@@ -163,12 +172,13 @@ evidence/abl-<timestamp>/
 
 reports/
 ├── abl-<timestamp>.json
-└── abl-<timestamp>.html
+├── abl-<timestamp>.html
+└── abl-<timestamp>.attestation.json
 ```
 
 Every evidence item includes a digest in the report. The HTML report shows the trace head, event count, manifest digest and Docker audit-event count as a compact **evidence trust chain**.
 
-## Tamper-evidence model
+## Tamper-evidence and attestation model
 
 `abl verify` checks three layers:
 
@@ -184,7 +194,24 @@ abl verify evidence/abl-... \
   --expected-trace-head <sha256>
 ```
 
-This project calls the structure **tamper-evident**, not tamper-proof. It does not yet digitally sign evidence bundles.
+Every assessment also emits an unsigned in-toto-style statement whose subject is the evidence manifest. Verify the binding independently:
+
+```bash
+abl verify-attestation \
+  reports/abl-....attestation.json \
+  evidence/abl-.../manifest.sha256.json
+```
+
+Or provide an attestation digest stored outside the evidence producer's boundary:
+
+```bash
+abl verify-attestation \
+  reports/abl-....attestation.json \
+  evidence/abl-.../manifest.sha256.json \
+  --expected-attestation-sha256 <sha256>
+```
+
+This project calls the structure **tamper-evident**, not tamper-proof. The attestation explicitly records `signed: false`; authenticity still requires an external trust anchor or a future signing backend.
 
 ## Docker AI Governance audit ingestion
 
@@ -208,6 +235,8 @@ Preview available records without adding them to an assessment:
 ```bash
 abl audit-summary --agent codex
 ```
+
+The audit summary also reports in-progress `.tmp` files. Those files are **not** ingested as evidence because Docker documents them as incomplete. If a live run has just finished and its records have not yet rotated to finalized `.jsonl`, re-run the generated assessment config after finalization instead of treating zero selected records as proof that no governed action occurred.
 
 Local audit delivery is an optional Docker AI Governance capability and is not required for the community/offline path.
 
@@ -257,19 +286,19 @@ make test
 make lint
 ```
 
-CI runs unit tests, sample-app tests, the offline-safe assessment, bundle verification and uploads the generated assessment as a workflow artifact.
+CI runs lint, unit tests, sample-app tests, a metadata-only live-run capsule, the offline-safe assessment, bundle verification, attestation verification and uploads generated evidence as a workflow artifact.
 
 ## Project status
 
 This is an implementation lab, not a finished assurance product. The most important next milestones are:
 
-1. collect the first real Docker AI Governance MCP `tool_invocation` + `tool_execution` pair from the DHI live demo;
+1. collect the first real Docker AI Governance MCP `tool_invocation` + `tool_execution` pair from the DHI live demo on a governed Docker organization;
 2. propagate or derive a stronger cross-system correlation key between the agent task and Docker audit session;
 3. add tested stop/quarantine response exercises;
-4. sign evidence anchors with a portable signing mechanism;
-5. submit upstream Agent Baseline feedback only when a reproducible implementation gap is found.
+4. add a portable signing backend for externally anchored attestations;
+5. contribute implementation evidence upstream where it adds information beyond existing Agent Baseline discussions.
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`docs/UPSTREAM_FEEDBACK.md`](docs/UPSTREAM_FEEDBACK.md).
 
 ## License
 
