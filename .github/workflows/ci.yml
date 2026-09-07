@@ -25,15 +25,22 @@ jobs:
       - name: Exercise metadata-only live-run capsule
         run: abl live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess
       - name: Exercise non-destructive response-drill contract
-        run: python -m agent_baseline_lab.response --sandbox abl-demo --output .abl/response/ci-stop-dry-run.json --dry-run
-      - name: Assert response dry-run never claims containment
+        run: >-
+          python -m agent_baseline_lab.response
+          --sandbox abl-demo
+          --output .abl/response/ci-stop-dry-run.json
+          --dry-run
+          --test-disposable-secret-revocation
+      - name: Assert response dry-run never claims containment or revocation
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
           payload = json.loads(Path('.abl/response/ci-stop-dry-run.json').read_text())
+          assert payload['schema_version'] == 2
           assert payload['verified_stopped'] is False
           assert payload['credential_revocation_tested'] is False
+          assert payload['credential_evidence'] == {}
           PY
       - name: Run offline-safe assessment
         run: |
