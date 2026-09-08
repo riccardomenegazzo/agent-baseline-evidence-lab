@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .privacy import sanitize_text, sanitize_value
+
 GENESIS_HASH = "0" * 64
 
 
@@ -22,16 +24,32 @@ def _event_hash(payload: dict[str, Any]) -> str:
 
 
 class TraceLedger:
-    """Append-only, hash-chained NDJSON ledger for one assessment run."""
+    """Append-only, hash-chained NDJSON ledger for one assessment run.
 
-    def __init__(self, path: Path, run_id: str):
+    When privacy_root is supplied, project/home path prefixes are minimized before
+    an event is hashed and persisted. This preserves a single canonical evidence
+    representation instead of redacting an already-hashed trace later.
+    """
+
+    def __init__(self, path: Path, run_id: str, *, privacy_root: Path | None = None):
         self.path = path
         self.run_id = run_id
+        self.privacy_root = privacy_root.resolve() if privacy_root is not None else None
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.sequence = 0
         self.previous_hash = GENESIS_HASH
         if self.path.exists():
             self.path.unlink()
+
+    def _text(self, value: str) -> str:
+        if self.privacy_root is None:
+            return value
+        return sanitize_text(value, self.privacy_root)
+
+    def _value(self, value: Any) -> Any:
+        if self.privacy_root is None:
+            return value
+        return sanitize_value(value, self.privacy_root)
 
     def append(
         self,
@@ -50,16 +68,16 @@ class TraceLedger:
         unsigned: dict[str, Any] = {
             "sequence": self.sequence,
             "timestamp": _utc_now(),
-            "run_id": self.run_id,
-            "event_type": event_type,
-            "actor": actor,
-            "action": action,
-            "target": target,
-            "decision": decision,
-            "result": result,
-            "task_id": task_id,
-            "control_id": control_id,
-            "attributes": attributes or {},
+            "run_id": self._text(self.run_id),
+            "event_type": self._text(event_type),
+            "actor": self._text(actor),
+            "action": self._text(action),
+            "target": self._text(target),
+            "decision": self._text(decision),
+            "result": self._text(result),
+            "task_id": self._text(task_id),
+            "control_id": self._text(control_id),
+            "attributes": self._value(attributes or {}),
             "prev_event_hash": self.previous_hash,
         }
         digest = _event_hash(unsigned)
