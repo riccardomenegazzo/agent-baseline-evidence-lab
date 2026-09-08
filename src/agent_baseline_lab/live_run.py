@@ -15,6 +15,7 @@ import yaml
 from .commands import CommandResult, exists, run
 from .config import get_path, load_config
 from .evidence import EvidenceStore, sha256_file, verify_manifest
+from .privacy import portable_path, sanitize_value
 
 
 @dataclass(frozen=True)
@@ -118,13 +119,12 @@ def _make_assessment_config(
 ) -> Path:
     cfg = copy.deepcopy(base_cfg)
     cfg.setdefault("sandbox", {})["name"] = sandbox_name
+    # Runtime config intentionally retains the real disposable workspace path.
+    # engine.py writes a separately sanitized evidence snapshot of this config.
     cfg["sandbox"]["workspace"] = str(workspace)
     assessment = cfg.setdefault("assessment", {})
     assessment["agent_run"] = {"path": str(session_dir / "session.json")}
 
-    # Resolve artifact checks against the disposable workspace. This keeps the
-    # base configuration useful for offline runs while ensuring live evidence
-    # validates the files the agent actually modified.
     for check in assessment.get("artifact_checks", []) or []:
         if not isinstance(check, dict):
             continue
@@ -192,6 +192,10 @@ def run_agent_task(
     shutil.copytree(template, workspace)
     store = EvidenceStore(session_dir)
 
+    workspace_ref = portable_path(root, workspace)
+    template_ref = portable_path(root, template)
+    task_ref = portable_path(root, task_file)
+
     before = _snapshot_workspace(workspace)
     store.write_json("workspace-before.json", before.to_dict(), "Content-hash inventory before the agent task.")
 
@@ -213,7 +217,7 @@ def run_agent_task(
         "sbx_available": exists("sbx"),
         "agent": agent,
         "sandbox_name": sandbox_name,
-        "workspace": str(workspace),
+        "workspace": workspace_ref,
     }
     if exists("sbx"):
         preflight["sbx_version"] = _observe(["sbx", "version"])
@@ -238,11 +242,12 @@ def run_agent_task(
 
     completed_at = utc_now()
     output_meta = _command_meta(execution)
+    persisted_command = sanitize_value(_redacted_agent_command(command, task_sha256), root)
     output_meta.update(
         {
             "attempted": executed,
             "dry_run": dry_run,
-            "command": _redacted_agent_command(command, task_sha256),
+            "command": persisted_command,
             "prompt_sha256": task_sha256,
             "prompt_bytes": len(task_bytes),
             "raw_prompt_persisted": False,
@@ -277,10 +282,10 @@ def run_agent_task(
         "sandbox_name": sandbox_name,
         "started_at": started_at,
         "completed_at": completed_at,
-        "workspace": str(workspace),
-        "workspace_template": str(template),
+        "workspace": workspace_ref,
+        "workspace_template": template_ref,
         "task": {
-            "source": str(task_file),
+            "source": task_ref,
             "sha256": task_sha256,
             "bytes": len(task_bytes),
             "persisted": False,
@@ -297,7 +302,9 @@ def run_agent_task(
             "total_bytes": after.total_bytes,
         },
         "changes": changes,
-        "evidence_semantics": "metadata-only by default; prompt and agent output are represented by digests",
+        "evidence_semantics": (
+            "metadata-only by default; prompt/output are represented by digests and host-local paths are minimized"
+        ),
     }
     store.write_json("session.json", session, "Normalized agent task execution capsule.")
 
@@ -337,7 +344,7 @@ def load_agent_run(path: str | Path) -> tuple[dict[str, Any], dict[str, Any]]:
     verification = {
         "manifest_valid": ok,
         "manifest_errors": errors,
-        "session_path": str(session_path),
+        "session_path": session_path.name,
     }
     return session, verification
 
