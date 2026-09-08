@@ -30,9 +30,19 @@ when { resource in MCP::Server::"dhi" };
 forbid (principal, action == MCP::Action::"register", resource)
 when { resource.type == "local-stdio" };
 
-// Keep the demo gateway static: no runtime server attachment or code-mode expansion.
+// Keep the demo gateway static: block runtime server attachment, discovery,
+// configuration changes, direct gateway execution and generated code-mode tools.
 forbid (principal, action == MCP::Action::"invokePrimordial", resource)
 when { resource in MCP::Primordial::"mcp-add" };
+
+forbid (principal, action == MCP::Action::"invokePrimordial", resource)
+when { resource in MCP::Primordial::"mcp-exec" };
+
+forbid (principal, action == MCP::Action::"invokePrimordial", resource)
+when { resource in MCP::Primordial::"mcp-find" };
+
+forbid (principal, action == MCP::Action::"invokePrimordial", resource)
+when { resource in MCP::Primordial::"mcp-config-set" };
 
 forbid (principal, action == MCP::Action::"invokePrimordial", resource)
 when { resource in MCP::Primordial::"code-mode" };

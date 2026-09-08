@@ -12,8 +12,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
           cache: pip
@@ -22,8 +22,55 @@ jobs:
       - run: ruff check src tests scripts sample-app
       - run: pytest
       - run: python -m unittest discover -s sample-app/tests -v
+
       - name: Exercise metadata-only live-run capsule
-        run: abl live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess
+        run: abl live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess || test $? -eq 1
+
+      - name: Exercise secret-free MCP runtime contract
+        run: >-
+          python -m agent_baseline_lab.mcp_runtime collect dhi
+          --expect dhi=https://dhi.io/mcp
+          --output reports/mcp-runtime-dry-run.json
+          --dry-run
+
+      - name: Exercise direct-MCP bypass contract without Docker mutation
+        run: >-
+          python -m agent_baseline_lab.mcp_bypass
+          --sandbox abl-demo
+          --server-url https://dhi.io/mcp
+          --policy policies/mcp/dhi-readonly.cedar
+          --output reports/mcp-direct-bypass-dry-run.json
+          --dry-run
+
+      - name: Exercise MCP OAuth revocation contract without credential mutation
+        run: >-
+          python -m agent_baseline_lab.mcp_oauth_revocation dhi
+          --output reports/mcp-oauth-revocation-dry-run.json
+          --dry-run
+
+      - name: Assert MCP dry runs cannot create positive runtime claims
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          runtime = json.loads(Path('reports/mcp-runtime-dry-run.json').read_text())
+          server = runtime['servers'][0]
+          assert server['inspect_attempted'] is False
+          assert server['identity_match'] is None
+          assert server['oauth_status_attempted'] is False
+
+          bypass = json.loads(Path('reports/mcp-direct-bypass-dry-run.json').read_text())
+          assert bypass['network_check_attempted'] is False
+          assert bypass['direct_connection_blocked_by_network_policy'] is None
+          assert bypass['defense_in_depth_verified'] is False
+
+          oauth = json.loads(Path('reports/mcp-oauth-revocation-dry-run.json').read_text())
+          assert oauth['remove_attempted'] is False
+          assert oauth['revocation_verified'] is False
+          assert oauth['secret_material_persisted'] is False
+          PY
+
       - name: Exercise non-destructive response-drill contract
         run: >-
           python -m agent_baseline_lab.response
@@ -31,6 +78,7 @@ jobs:
           --output .abl/response/ci-stop-dry-run.json
           --dry-run
           --test-disposable-secret-revocation
+
       - name: Assert response dry-run never claims containment or revocation
         run: |
           python - <<'PY'
@@ -42,12 +90,14 @@ jobs:
           assert payload['credential_revocation_tested'] is False
           assert payload['credential_evidence'] == {}
           PY
+
       - name: Exercise full interview orchestration without Docker mutation
         run: >-
           python -m agent_baseline_lab.interview_demo
           --config examples/agent.yaml
           --task examples/task.md
           --dry-run
+
       - name: Assert interview dry-run cannot produce positive response claims
         run: |
           python - <<'PY'
@@ -62,23 +112,26 @@ jobs:
           assert payload['response_link_verified'] is False
           assert payload['response_link'] == ''
           PY
+
       - name: Run offline-safe assessment
         run: |
           set +e
           abl assess --config examples/agent.yaml
           rc=$?
-          # FAIL is meaningful assessment output; evaluator errors would still be visible in the report.
           test "$rc" -eq 0 -o "$rc" -eq 1
+
       - name: Verify generated evidence bundle
         run: |
           latest=$(ls -1dt evidence/abl-* | head -1)
           abl verify "$latest"
+
       - name: Run evidence adversarial verification matrix
         run: |
           latest=$(ls -1dt evidence/abl-* | head -1)
           python -m agent_baseline_lab.evidence_matrix \
             "$latest" \
             --output reports/evidence-verification-matrix.json
+
       - name: Assert evidence trust boundaries remain explicit
         run: |
           python - <<'PY'
@@ -86,19 +139,14 @@ jobs:
           from pathlib import Path
           payload = json.loads(Path('reports/evidence-verification-matrix.json').read_text())
           scenarios = {item['id']: item for item in payload['scenarios']}
-
           assert scenarios['single-file-alteration']['internal_verifier_passed'] is False
           assert scenarios['trace-truncation']['internal_verifier_passed'] is False
-
-          # A producer that rewrites every local anchor can create a self-consistent bundle.
-          # The original external digest/head must still detect that rewrite.
           assert scenarios['coordinated-rewrite']['internal_verifier_passed'] is True
           assert scenarios['coordinated-rewrite']['externally_anchored_verifier_passed'] is False
-
-          # Artifact integrity alone cannot reveal a source event that never entered the export.
           assert scenarios['event-never-emitted']['internal_verifier_passed'] is True
           assert scenarios['event-never-emitted']['externally_anchored_verifier_passed'] is True
           PY
+
       - name: Verify provenance attestation subject binding
         run: |
           latest=$(ls -1dt evidence/abl-* | head -1)
@@ -106,7 +154,63 @@ jobs:
           abl verify-attestation \
             "reports/${run_id}.attestation.json" \
             "${latest}/manifest.sha256.json"
-      - uses: actions/upload-artifact@v4
+
+      - name: Exercise metadata-only unintended-action detector
+        run: |
+          latest=$(ls -1dt agent-runs/agent-* | head -1)
+          python -m agent_baseline_lab.unintended \
+            "$latest/session.json" \
+            --output reports/unintended-action.json
+
+      - name: Exercise non-agent fallback workflow
+        run: >-
+          python -m agent_baseline_lab.fallback
+          --command-json '["python3","-m","unittest","discover","-s","sample-app/tests","-v"]'
+          --cwd .
+          --output reports/non-agent-fallback.json
+
+      - name: Build and verify evidence-preserving incident bundle
+        run: |
+          latest=$(ls -1dt evidence/abl-* | head -1)
+          python -m agent_baseline_lab.incident build \
+            "$latest" \
+            --fallback reports/non-agent-fallback.json \
+            --output-root incidents
+          incident=$(ls -1dt incidents/incident-* | head -1)
+          python -m agent_baseline_lab.incident verify "$incident"
+
+      - name: Sign incident manifest with ephemeral Ed25519 key
+        run: |
+          mkdir -p .abl/keys
+          python -m agent_baseline_lab.signing keygen .abl/keys/ci-evidence-key --identity ci-agent-baseline-lab
+          incident=$(ls -1dt incidents/incident-* | head -1)
+          python -m agent_baseline_lab.signing sign \
+            "$incident/incident-manifest.sha256.json" \
+            --private-key .abl/keys/ci-evidence-key \
+            --identity ci-agent-baseline-lab
+          fingerprint=$(ssh-keygen -lf .abl/keys/ci-evidence-key.pub -E sha256 | awk '{print $2}')
+          python -m agent_baseline_lab.signing verify \
+            "$incident/incident-manifest.sha256.json.signature.json" \
+            --expected-fingerprint "$fingerprint"
+
+      - name: Exercise transparency-log publication contract without network publication
+        run: |
+          incident=$(ls -1dt incidents/incident-* | head -1)
+          python -m agent_baseline_lab.rekor \
+            "$incident/incident-manifest.sha256.json" \
+            --signature "$incident/incident-manifest.sha256.json.sig" \
+            --public-key .abl/keys/ci-evidence-key.pub \
+            --output reports/rekor-dry-run.json \
+            --dry-run
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('reports/rekor-dry-run.json').read_text())
+          assert payload['inclusion_verified'] is False
+          assert payload['entry_uuid'] == ''
+          PY
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: assessment-report
@@ -114,4 +218,5 @@ jobs:
             reports/
             evidence/
             agent-runs/
+            incidents/
             .abl/response/

@@ -35,33 +35,61 @@
 
 ## V0.5 — governed MCP execution evidence
 
-- [ ] capture a real Docker AI Governance `tool_invocation` + `tool_execution` pair
-- [ ] derive or propagate a stronger cross-system correlation key between agent task and Docker audit session
-- [ ] `sbx mcp` registration inventory adapter with identity/URL matching
-- [ ] correlate evaluation → approval/deny → tool execution outcome
-- [ ] test explicit `invokePrimordial` restrictions for dynamic gateway tools
-- [ ] direct-MCP bypass scenario mapped jointly to MCP + network policy
-- [ ] evidence model for OAuth authorization state without collecting secrets
-- [ ] OBS-03 drift baseline for destinations/tool use/resource consumption
-- [ ] OBS-04 unintended-action detector for credential/code co-commit scenarios
+- [ ] capture a real Docker AI Governance `tool_invocation` + `tool_execution` pair on a governed organization
+- [x] run-scoped cross-system correlation marker with explicit exact/bounded/ambiguous evidence grades
+- [x] `sbx mcp inspect` runtime registration adapter with canonical identity-URL matching
+- [x] evaluation / approval-or-deny / invocation / execution action-chain correlation
+- [x] explicit `invokePrimordial` restrictions for dynamic gateway expansion
+- [x] direct-MCP bypass scenario mapped jointly to MCP + network policy
+- [x] OAuth authorization-state evidence with status/scope allowlisting and no token persistence
+- [x] explicit Docker-hosted MCP OAuth credential revocation adapter with before/after verification
+- [x] OBS-03 behavior drift baseline for destinations, MCP tools, event counts and available resource metrics
+- [x] OBS-04 metadata-only unintended-action detector for credential/code co-change patterns
 
-## V0.6 — response exercise
+The remaining V0.5 item requires a real Docker AI Governance organization and finalized audit records. The code intentionally does not manufacture runtime proof in CI or offline mode.
 
-- [ ] tested sandbox stop circuit breaker
-- [ ] credential/permit revocation evidence adapter where available
-- [ ] component quarantine registry
-- [ ] evidence-preserving incident bundle
-- [ ] tested non-agent fallback workflow
+## V0.6 — response exercise ✅
 
-## Trust hardening
+- [x] tested sandbox stop circuit breaker with post-state verification
+- [x] sandbox-scoped disposable credential-binding revocation evidence
+- [x] optional Docker-hosted MCP OAuth credential revocation evidence
+- [x] append-only component quarantine registry linked to source evidence digests
+- [x] evidence-preserving incident bundle with byte-for-byte copy verification
+- [x] tested non-agent fallback execution path with metadata-only output evidence
+- [x] immutable assessment-to-response link statement and independent verifier
 
-- [ ] portable digital signature for the final evidence anchor
-- [ ] optional transparency-log publication
-- [ ] signed baseline-source lock
-- [ ] evidence schema versioning and migration tests
+## V0.7 — trust and assurance hardening ✅ implementation-complete
+
+- [x] portable Ed25519 detached signatures using OpenSSH `ssh-keygen -Y sign`
+- [x] independent signature verification using an externally pinnable public-key fingerprint
+- [x] optional Sigstore Rekor publication adapter for SSH-signed evidence
+- [x] baseline source lock verification and optional signature
+- [x] artifact schema registry and conservative migration tests
+- [x] adversarial evidence-verification matrix
+- [x] independent completeness-witness reconciliation
+- [x] incident-bundle integrity manifest
+- [x] CI-safe dry-run contracts that cannot produce positive live-security claims
+
+## Remaining external-runtime milestones
+
+These are deliberately not checked until real external evidence exists:
+
+1. collect a finalized Docker AI Governance MCP evaluation + execution chain from a governed organization;
+2. obtain an `exact-marker` correlation between that Docker audit stream and one specific coding-agent run;
+3. run OAuth revocation against a deliberately disposable OAuth authorization rather than a personal/customer credential;
+4. publish one intentionally public signed demo manifest to Rekor and retain its verified inclusion receipt;
+5. pin a demo signer fingerprint outside the evidence producer boundary;
+6. run the complete customer-style PoC on a clean Mac and archive the resulting signed incident/evidence package.
 
 ## Upstream objective
 
-Use reproducible implementation friction to propose a narrowly evidenced issue or PR to the Agent Baseline project. Do not manufacture feedback merely for visibility.
+Use reproducible implementation friction to propose narrowly evidenced test methods or implementation feedback to the Agent Baseline project. Do not manufacture feedback merely for visibility.
 
-The immediate upstream-quality milestone is a reproducible real governance run containing an MCP evaluation/execution pair **without leaking prompt content, credentials, or customer-sensitive metadata**.
+The repository already contains a reproducible independent-evidence test method demonstrating that:
+
+- uncoordinated alteration and trace truncation are detectable internally;
+- a coordinated rewrite of all local anchors requires an external trust anchor to detect;
+- an event never emitted into the evidence pipeline cannot be recovered from artifact integrity alone;
+- completeness therefore needs an independent source-of-record, sequence/checkpoint expectation, or reconciliation witness.
+
+The next upstream-quality milestone is a real governed Docker MCP audit chain that adds runtime evidence beyond the existing offline and structural findings.
