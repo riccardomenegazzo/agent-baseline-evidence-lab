@@ -34,8 +34,9 @@ dev = ["pytest>=8.3,<9", "ruff>=0.12,<1", "build>=1.2,<2"]
 
 [project.scripts]
 abl = "agent_baseline_lab.cli:main"
-abl-trust = "agent_baseline_lab.customer_trust_flow:main"
+abl-trust = "agent_baseline_lab.trust_cli:main"
 abl-preflight = "agent_baseline_lab.demo_preflight:main"
+abl-present = "agent_baseline_lab.present:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
