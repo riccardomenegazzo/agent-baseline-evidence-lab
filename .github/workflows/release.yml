@@ -190,7 +190,8 @@ jobs:
           .release-smoke/bin/abl-accept --help >/dev/null
           .release-smoke/bin/abl-policy list-profiles | grep -qx 'poc-observe'
           .release-smoke/bin/abl-policy list-profiles | grep -qx 'enterprise-strict'
-          policy_tmp=$(mktemp)
+          policy_tmp_dir=$(mktemp -d)
+          policy_tmp="$policy_tmp_dir/enterprise-strict.yaml"
           .release-smoke/bin/abl-policy export-profile enterprise-strict --output "$policy_tmp"
           test -s "$policy_tmp"
           grep -q '^id: enterprise-strict$' "$policy_tmp"
