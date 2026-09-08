@@ -85,12 +85,6 @@ def verify_signed_baseline_lock(
 ) -> tuple[bool, list[str], dict[str, Any]]:
     root = Path(cache_dir)
     lock_ok, lock_errors, lock_summary = verify_baseline_lock(root)
-    signature_ok, signature_errors, signature_summary = verify_artifact_signature(
-        root / "baseline.lock.signature.json",
-        artifact=root / "baseline.lock.json",
-        public_key=str(Path(str(Path(root / "baseline.lock.json.signature.json")))),
-    ) if False else (False, [], {})
-    # Signature receipts record their public-key path. Verification therefore needs no guessed key path.
     try:
         signature_ok, signature_errors, signature_summary = verify_artifact_signature(
             root / "baseline.lock.signature.json",
