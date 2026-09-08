@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .evidence import sha256_file, verify_bundle
+from .privacy import find_local_path_markers
 from .signing import verify_signature
 
 
@@ -138,6 +139,12 @@ def create_pack(
 
     def add_bytes(archive_path: str, data: bytes, role: str) -> str:
         archive = _validate_archive_path(archive_path)
+        leaked_markers = find_local_path_markers(data, root)
+        if leaked_markers:
+            raise ValueError(
+                f"refusing to export local filesystem path marker in {archive}; "
+                "persist evidence-safe relative references before customer handoff"
+            )
         if archive in entries and entries[archive] != (data, role):
             raise ValueError(f"duplicate archive path: {archive}")
         entries[archive] = (data, role)
@@ -257,10 +264,12 @@ def create_pack(
             "private signing keys",
             "agent-runs raw execution capsules",
             "host filesystem paths from incident manifests",
+            "local project/home path prefixes",
             "unreferenced local .abl state",
         ],
         claims_boundary=(
             "This portable pack preserves and verifies shareable evidence for one assessment run. "
+            "Creation fails closed if selected artifacts still contain the local project or home path. "
             "Its internal manifest is not itself an external trust anchor. Pin or sign the final ZIP digest "
             "through an independent channel when authenticity of the handoff matters."
         ),
