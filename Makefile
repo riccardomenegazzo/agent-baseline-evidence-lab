@@ -1,5 +1,5 @@
 .PHONY: install test lint preflight baseline-sync baseline-lock-verify baseline-lock-sign baseline-lock-verify-signature \
-	assess demo verify evidence-matrix audit-summary \
+	assess demo verify assurance-latest evidence-matrix audit-summary \
 	live-dry-run live-demo live-demo-mcp mcp-register-dhi mcp-inventory-dhi mcp-bypass-dhi mcp-oauth-status \
 	sandbox-create sandbox-run sandbox-shell sandbox-rm \
 	response-drill response-drill-full response-drill-dry-run response-link response-link-verify \
@@ -58,6 +58,10 @@ verify:
 	@latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
 	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
 	$(ABL) verify "$$latest"
+
+assurance-latest:
+	$(PYTHON) -m agent_baseline_lab.assurance_suite \
+		--output reports/assurance-summary.json
 
 evidence-matrix:
 	@latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
