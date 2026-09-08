@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import urllib.request
@@ -107,3 +108,18 @@ def verify_lock(cache_dir: str | Path) -> tuple[bool, list[str], dict[str, Any]]
         "valid": not errors,
     }
     return not errors, errors, summary
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Verify a cached Agent Baseline source lock")
+    parser.add_argument("cache_dir", nargs="?", default=".cache/agent-baseline")
+    args = parser.parse_args(argv)
+    ok, errors, summary = verify_lock(args.cache_dir)
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    for error in errors:
+        print(f"ERROR: {error}")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
