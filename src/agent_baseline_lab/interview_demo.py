@@ -10,8 +10,10 @@ from typing import Any
 from .audit_correlation import analyze_audit_correlation, run_correlation_probe
 from .engine import run_assessment
 from .evidence import sha256_file, verify_bundle
+from .incident_bundle import create_incident_bundle, verify_incident_bundle
 from .live_run import cleanup_sandbox, run_agent_task
 from .models import Status
+from .quarantine import create_quarantine_entry, verify_registry
 from .response import run_stop_drill
 from .response_link import create_response_link
 from .response_link_verify import verify_response_link
@@ -38,6 +40,10 @@ class InterviewDemoSummary:
     assessment_fail_or_error_count: int
     sandbox_stop_verified: bool
     credential_binding_revocation_verified: bool
+    quarantine_registered: bool
+    quarantine_registry: str
+    incident_bundle: str
+    incident_bundle_verified: bool
     audit_correlation_requested: bool
     audit_correlation_probe_attempted: bool
     audit_correlation_strength: str
@@ -109,8 +115,6 @@ def run_interview_demo(
 
     link_path = root / "reports" / f"{report.run_id}.response-link.json"
     if dry_run:
-        # A dry run is intentionally incapable of satisfying containment claims.
-        # Preserve the negative evidence but do not fabricate a response link.
         link_verified = False
         link_sha256 = ""
     else:
@@ -173,6 +177,47 @@ def run_interview_demo(
         )
         correlation_report = str(correlation_report_path)
 
+    quarantine_registered = False
+    quarantine_registry = ""
+    incident_bundle_path = ""
+    incident_bundle_verified = False
+    if not dry_run and response.verified_stopped and link_verified:
+        registry_path = root / ".abl" / "quarantine" / "registry.ndjson"
+        create_quarantine_entry(
+            registry_path,
+            component_type="sandbox",
+            component_id=live.sandbox_name,
+            reason="verified response containment after manager-facing evidence exercise",
+            source_run_id=report.run_id,
+            response_evidence_path=response_path,
+        )
+        registry_ok, registry_errors, _ = verify_registry(registry_path)
+        if not registry_ok:
+            raise RuntimeError("quarantine registry verification failed: " + "; ".join(registry_errors))
+        quarantine_registered = True
+        quarantine_registry = str(registry_path)
+
+        incident_path = root / "reports" / f"{report.run_id}.incident.json"
+        artifacts: list[tuple[str, str | Path]] = [
+            ("assessment-manifest", assessment_evidence / "manifest.sha256.json"),
+            ("assessment-report", assessment_json),
+            ("response-evidence", response_path),
+            ("response-link", link_path),
+            ("quarantine-registry", registry_path),
+        ]
+        if correlation_report:
+            artifacts.append(("audit-correlation", correlation_report))
+        create_incident_bundle(
+            incident_path,
+            source_run_id=report.run_id,
+            artifacts=artifacts,
+        )
+        incident_ok, incident_errors, _ = verify_incident_bundle(incident_path)
+        if not incident_ok:
+            raise RuntimeError("incident bundle verification failed: " + "; ".join(incident_errors))
+        incident_bundle_path = str(incident_path)
+        incident_bundle_verified = True
+
     cleanup_attempted = False
     cleanup_succeeded: bool | None = None
     if cleanup and live.executed:
@@ -184,7 +229,7 @@ def run_interview_demo(
         result.status in {Status.FAIL, Status.ERROR} for result in report.results
     )
     summary = InterviewDemoSummary(
-        schema_version=2,
+        schema_version=3,
         started_at=started_at,
         completed_at=_utc_now(),
         session_id=live.session_id,
@@ -203,6 +248,10 @@ def run_interview_demo(
         assessment_fail_or_error_count=fail_or_error,
         sandbox_stop_verified=response.verified_stopped,
         credential_binding_revocation_verified=response.credential_revocation_tested,
+        quarantine_registered=quarantine_registered,
+        quarantine_registry=quarantine_registry,
+        incident_bundle=incident_bundle_path,
+        incident_bundle_verified=incident_bundle_verified,
         audit_correlation_requested=enable_audit,
         audit_correlation_probe_attempted=bool(
             correlation_probe and correlation_probe.attempted
@@ -264,6 +313,8 @@ def main(argv: list[str] | None = None) -> int:
         f"{summary.credential_binding_revocation_verified} (Docker sandbox binding)"
     )
     print(f"  response link:       {summary.response_link_verified}")
+    print(f"  quarantine:          {summary.quarantine_registered}")
+    print(f"  incident bundle:     {summary.incident_bundle_verified}")
     if summary.response_link_sha256:
         print(f"  response link SHA:   {summary.response_link_sha256}")
     if summary.audit_correlation_requested:
@@ -282,6 +333,8 @@ def main(argv: list[str] | None = None) -> int:
     if not summary.sandbox_stop_verified:
         return 1
     if not summary.credential_binding_revocation_verified:
+        return 1
+    if not summary.quarantine_registered or not summary.incident_bundle_verified:
         return 1
     if summary.cleanup_attempted and summary.cleanup_succeeded is not True:
         return 1
