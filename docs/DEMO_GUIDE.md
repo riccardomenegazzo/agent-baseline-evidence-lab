@@ -6,18 +6,109 @@ The demo is designed around one question:
 
 > **Can we move from an AI coding-agent governance claim all the way to a container artifact and customer handoff that another person can verify?**
 
-## Recommended format
+## Interview format: five minutes
 
-- **2 minutes** — problem and architecture;
-- **4 minutes** — Customer Trust Flow;
-- **2 minutes** — inspect trust evidence and decision;
-- **2 minutes** — claims boundary and discussion.
+Use this compressed path for a hiring-manager conversation:
 
-The live path is preferable when Docker Sandboxes and Buildx prerequisites are available. The dry-run path is intentionally non-destructive and must never claim live containment, artifact lineage or runtime enforcement.
+- **0:00–0:45** — customer problem and trust-chain diagram;
+- **0:45–1:30** — live-demo preflight and what it refuses to assume;
+- **1:30–3:15** — run or show the Customer Trust Flow;
+- **3:15–4:20** — Decision Brief, lineage and signed handoff;
+- **4:20–5:00** — one negative test proving that mutation invalidates trust.
+
+The goal is not to show every feature. The goal is to demonstrate a reusable technical-enablement pattern:
+
+> **problem → success criteria → governed execution → evidence → trusted artifact → decision → portable verification**
 
 ---
 
-## 1. Open with the problem
+## 1. Prepare the Mac before the interview
+
+For the local macOS path, Docker Sandboxes currently requires macOS Sonoma 14 or later on Apple silicon. The `sbx` CLI itself does not require Docker Desktop, but this project also performs a host-side Buildx trusted-artifact stage, so a working Docker daemon and Buildx are required for the complete live flow.
+
+Install/update the project first:
+
+```bash
+make install
+```
+
+Prepare Docker Sandboxes outside the interview so no sign-in prompt appears during the demo:
+
+```bash
+sbx login
+sbx secret set openai --oauth
+```
+
+Also initialize the local sandbox network-policy preset deliberately before the session if you have not already done so. For example:
+
+```bash
+sbx policy init balanced
+```
+
+Do not change a centrally managed organization policy for the sake of the demo. Organization policy remains authoritative when present.
+
+Prepare the Agent Baseline source lock and local signing material:
+
+```bash
+make baseline-sync
+```
+
+Generate the local Ed25519 keypair only if it does not already exist:
+
+```bash
+test -f .abl/keys/attestation-private.json || make signing-keygen
+```
+
+Then bind and verify the baseline lock:
+
+```bash
+make baseline-lock-verify
+make baseline-lock-sign
+make baseline-lock-verify-signature
+```
+
+---
+
+## 2. Run the interview-grade preflight
+
+Before the live flow, run:
+
+```bash
+python -m agent_baseline_lab.demo_preflight \
+  --scout-mode observe \
+  --sandbox-smoke
+```
+
+The preflight checks the prerequisites that would otherwise fail at the worst possible moment:
+
+- supported host platform;
+- Python 3.11+;
+- Docker CLI and daemon reachability;
+- Docker Buildx;
+- Docker Scout availability, without making it a hard requirement in `observe` mode;
+- `sbx` CLI and local control-plane reachability;
+- inspectable sandbox policy state;
+- a host-managed OpenAI credential for Codex, without reading or persisting the token;
+- verified Agent Baseline lock;
+- local signing keypair;
+- required demo assets;
+- optionally, one disposable shell sandbox lifecycle.
+
+With `--sandbox-smoke`, the preflight creates a temporary shell sandbox, records a per-sandbox deny rule for `exfiltration.invalid`, executes a trivial command, verifies that the deny rule is visible in sandbox policy state, and removes the sandbox.
+
+This is deliberately stronger than checking whether an `sbx` binary exists.
+
+The machine-readable result is written to:
+
+```text
+reports/demo-preflight.json
+```
+
+A green preflight still does **not** claim that the later Codex task, every runtime policy decision, Scout result, OCI trust chain or final disposition will succeed.
+
+---
+
+## 3. Open with the customer problem
 
 Start from the repository home rather than the code.
 
@@ -32,21 +123,13 @@ Then point out two deliberate design choices:
 
 ---
 
-## 2. Run the safe trust-flow path first
+## 4. Safe path when you do not want live mutation
 
-Install from source:
-
-```bash
-make install
-```
-
-Then run the complete non-mutating trust lifecycle:
+The complete non-mutating lifecycle is:
 
 ```bash
 make customer-trust-dry-run
 ```
-
-The target creates a local demo signing key only when one does not already exist, then exercises the full orchestration in dry-run mode.
 
 What this demonstrates:
 
@@ -69,28 +152,18 @@ This fail-closed behavior is also exercised by the dedicated `customer-trust` CI
 
 ---
 
-## 3. Run the live Customer Trust Flow
+## 5. Run the live Customer Trust Flow
 
-Before a live customer-facing run:
-
-```bash
-make baseline-sync
-make signing-keygen
-make baseline-lock-verify
-make baseline-lock-sign
-make baseline-lock-verify-signature
-```
-
-Then use the default observation mode:
-
-```bash
-make customer-trust SCOUT_MODE=observe
-```
-
-Equivalent installed CLI:
+For the first manager demo, use Docker Scout in observation mode:
 
 ```bash
 abl-trust --scout-mode observe
+```
+
+Equivalent repository target:
+
+```bash
+make customer-trust SCOUT_MODE=observe
 ```
 
 For MCP-focused environments:
@@ -104,15 +177,15 @@ The live lifecycle is:
 ```text
 readiness + signed baseline lock
   ↓
-unique Docker Sandbox + real coding task
+unique Docker Sandbox + real Codex task
   ↓
 Agent Baseline assessment + assurance
   ↓
 agent-modified workspace
   ↓
 Docker Buildx OCI artifact
-  ├─ SBOM
-  └─ provenance
+  ├─ SPDX SBOM
+  └─ SLSA provenance
   ↓
 OCI graph + attestation verification
   ↓
@@ -120,16 +193,18 @@ optional Docker Scout policy evidence
   ↓
 agent → workspace → artifact lineage
   ↓
-customer decision brief
+Customer Decision Brief
   ↓
-SARIF + signed customer trust handoff
+SARIF + signed Customer Trust Handoff
 ```
+
+The coding task is intentionally small and customer-readable: add a `/health` endpoint, update tests, validate the application, and stay inside the declared capability boundary.
 
 The important result is not “how many controls are green”. The important result is whether the evidence chain is internally consistent, independently verifiable and explicit about what remains unproven.
 
 ---
 
-## 4. Explain Docker Scout modes
+## 6. Explain Docker Scout modes
 
 The project intentionally separates observation from gating:
 
@@ -142,16 +217,16 @@ gate     Scout must pass before EVIDENCE_READY is possible
 For a first manager demo, prefer:
 
 ```bash
-make customer-trust SCOUT_MODE=observe
+abl-trust --scout-mode observe
 ```
 
 This lets you show the integration without making the entire demonstration depend on one local Scout policy configuration.
 
-Use `gate` when the PoC success criteria explicitly require Docker Scout as a hard condition.
+Use `gate` only when Docker Scout is an agreed PoC acceptance criterion.
 
 ---
 
-## 5. Show four artifacts, not forty
+## 7. Show four artifacts, not forty
 
 ### A. Customer Trust Flow HTML
 
@@ -180,7 +255,7 @@ Discuss the disposition:
 
 Stress that `EVIDENCE_READY` means the configured PoC evidence boundary was satisfied — not production approval or Docker certification.
 
-### C. Trusted Artifact + lineage
+### C. Trusted artifact + lineage
 
 Open:
 
@@ -211,18 +286,32 @@ Verify it independently:
 make trust-handoff-verify
 ```
 
-or:
-
-```bash
-python -m agent_baseline_lab.trust_handoff \
-  reports/<run-id>.customer-trust-handoff.zip
-```
-
 The verifier checks the handoff manifest, member digests/sizes, nested customer evidence pack, nested signatures, private-key exclusion and lineage signature where present.
 
 ---
 
-## 6. Show the developer/security integration
+## 8. End with a controlled negative test
+
+Do not tamper with the successful live evidence during an interview. Instead, use the deterministic regression tests that model the same trust failure:
+
+```bash
+pytest -q tests/test_artifact_lineage.py -k mutation
+```
+
+The two tests prove that lineage creation is rejected when either:
+
+- the workspace is modified after the recorded agent run; or
+- the OCI archive is modified after trusted-artifact verification.
+
+This is a stronger closing moment than another green dashboard because it demonstrates that the trust statement has a real invalidation condition.
+
+Suggested sentence:
+
+> The important property here is not that the system can produce a green artifact. It is that the same verifier refuses the claim when the workspace or artifact no longer matches the evidence chain.
+
+---
+
+## 9. Developer/security integration
 
 The flow also produces SARIF:
 
@@ -234,7 +323,7 @@ This is useful to explain that the pattern can feed existing security tooling ra
 
 ---
 
-## 7. Optional before/after story
+## 10. Optional before/after story
 
 If the discussion moves from “is this run reviewable?” to “did governance change anything?”, switch to the comparative path.
 
