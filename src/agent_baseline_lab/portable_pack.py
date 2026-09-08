@@ -27,7 +27,6 @@ class PackFile:
 @dataclass(frozen=True)
 class LinkedIncidentArtifact:
     role: str
-    source_path: str
     archive_path: str
     sha256: str
 
@@ -78,6 +77,13 @@ def _safe_relative(root: Path, path: Path) -> Path:
     return relative
 
 
+def _validate_archive_path(archive: str) -> str:
+    pure = PurePosixPath(archive)
+    if pure.is_absolute() or ".." in pure.parts or not archive:
+        raise ValueError(f"unsafe archive path: {archive}")
+    return pure.as_posix()
+
+
 def _zip_write(zf: zipfile.ZipFile, archive_path: str, data: bytes) -> None:
     info = zipfile.ZipInfo(archive_path, date_time=(1980, 1, 1, 0, 0, 0))
     info.compress_type = zipfile.ZIP_DEFLATED
@@ -86,13 +92,14 @@ def _zip_write(zf: zipfile.ZipFile, archive_path: str, data: bytes) -> None:
 
 
 def _report_candidates(root: Path, run_id: str) -> list[Path]:
+    # The incident bundle is intentionally excluded here and rewritten below with
+    # archive-relative paths so host filesystem paths are never exported.
     names = [
         f"{run_id}.json",
         f"{run_id}.html",
         f"{run_id}.attestation.json",
         f"{run_id}.attestation.json.ed25519.json",
         f"{run_id}.response-link.json",
-        f"{run_id}.incident.json",
         f"{run_id}.interview-demo.json",
         f"{run_id}.audit-correlation.json",
         f"{run_id}.evidence-matrix.json",
@@ -127,42 +134,43 @@ def create_pack(
     if not bundle_ok:
         raise ValueError("refusing to export invalid assessment bundle: " + "; ".join(bundle_errors))
 
-    selected: dict[str, tuple[Path, str]] = {}
+    entries: dict[str, tuple[bytes, str]] = {}
 
-    def add(path: Path, role: str, archive_path: str | None = None) -> str:
+    def add_bytes(archive_path: str, data: bytes, role: str) -> str:
+        archive = _validate_archive_path(archive_path)
+        if archive in entries and entries[archive] != (data, role):
+            raise ValueError(f"duplicate archive path: {archive}")
+        entries[archive] = (data, role)
+        return archive
+
+    def add_file(path: Path, role: str, archive_path: str | None = None) -> str:
         if not path.exists() or not path.is_file():
             raise ValueError(f"pack source file is missing: {path}")
         relative = _safe_relative(root, path)
         archive = archive_path or relative.as_posix()
-        pure = PurePosixPath(archive)
-        if pure.is_absolute() or ".." in pure.parts:
-            raise ValueError(f"unsafe archive path: {archive}")
-        if archive in selected and selected[archive][0].resolve() != path.resolve():
-            raise ValueError(f"duplicate archive path: {archive}")
-        selected[archive] = (path, role)
-        return archive
+        return add_bytes(archive, path.read_bytes(), role)
 
     for path in sorted(evidence_dir.rglob("*")):
         if path.is_symlink():
             raise ValueError(f"refusing to export symlink from evidence bundle: {path}")
         if path.is_file():
-            add(path, "assessment-evidence")
+            add_file(path, "assessment-evidence")
 
     for report in _report_candidates(root, run_id):
         if report.exists():
-            add(report, "report")
+            add_file(report, "report")
 
     assurance = _assurance_matches(root, run_id)
     if assurance is not None:
-        add(assurance, "assurance-summary")
+        add_file(assurance, "assurance-summary")
 
     public_key = root / ".abl" / "keys" / "attestation-public.json"
     if public_key.exists():
-        add(public_key, "public-verification-key", "trust/attestation-public.json")
+        add_file(public_key, "public-verification-key", "trust/attestation-public.json")
 
     registry = root / ".abl" / "quarantine" / "registry.ndjson"
     if registry.exists():
-        add(registry, "quarantine-registry")
+        add_file(registry, "quarantine-registry")
 
     linked: list[LinkedIncidentArtifact] = []
     incident_path = root / "reports" / f"{run_id}.incident.json"
@@ -173,10 +181,16 @@ def create_pack(
         artifacts = incident.get("artifacts", [])
         if not isinstance(artifacts, list):
             raise ValueError("incident bundle artifacts must be a list")
+
+        portable_artifacts: list[dict[str, str]] = []
+        seen_roles: set[str] = set()
         for item in artifacts:
             if not isinstance(item, dict):
                 raise ValueError("incident bundle contains malformed artifact entry")
-            role = str(item.get("role", ""))
+            role = str(item.get("role", "")).strip()
+            if not role or role in seen_roles:
+                raise ValueError("incident bundle contains missing or duplicate artifact role")
+            seen_roles.add(role)
             source = Path(str(item.get("path", "")))
             if not source.is_absolute():
                 source = root / source
@@ -187,34 +201,52 @@ def create_pack(
             observed = sha256_file(source)
             if observed != expected:
                 raise ValueError(f"incident artifact digest mismatch before export: {role}")
-            archive = add(source, f"incident-artifact:{role}")
+            archive = add_file(source, f"incident-artifact:{role}")
             linked.append(
                 LinkedIncidentArtifact(
                     role=role,
-                    source_path=str(item.get("path", "")),
                     archive_path=archive,
                     sha256=observed,
                 )
             )
-
-    forbidden_sources = [
-        root / ".abl" / "keys" / "attestation-private.json",
-    ]
-    selected_sources = {path.resolve() for path, _ in selected.values()}
-    for forbidden in forbidden_sources:
-        if forbidden.exists() and forbidden.resolve() in selected_sources:
-            raise ValueError("private signing key must never be included in a portable pack")
-
-    files: list[PackFile] = []
-    for archive, (path, role) in sorted(selected.items()):
-        files.append(
-            PackFile(
-                path=archive,
-                role=role,
-                sha256=sha256_file(path),
-                size=path.stat().st_size,
+            portable_artifacts.append(
+                {
+                    "role": role,
+                    "path": archive,
+                    "sha256": observed,
+                }
             )
+
+        portable_incident = {
+            "schema_version": 1,
+            "portable": True,
+            "incident_id": incident.get("incident_id"),
+            "created_at": incident.get("created_at"),
+            "source_run_id": run_id,
+            "artifacts": portable_artifacts,
+            "claims_boundary": (
+                "Portable incident manifest. Artifact paths are ZIP-member paths, not host paths. "
+                "Digest validity preserves evidence linkage but does not establish root cause or external authenticity."
+            ),
+        }
+        add_bytes(
+            f"reports/{run_id}.incident.json",
+            (json.dumps(portable_incident, indent=2, sort_keys=True) + "\n").encode("utf-8"),
+            "portable-incident-manifest",
         )
+
+    if any(name.endswith("attestation-private.json") for name in entries):
+        raise ValueError("private signing key must never be included in a portable pack")
+
+    files = [
+        PackFile(
+            path=archive,
+            role=role,
+            sha256=_sha256_bytes(data),
+            size=len(data),
+        )
+        for archive, (data, role) in sorted(entries.items())
+    ]
 
     summary = PackSummary(
         schema_version=1,
@@ -224,6 +256,7 @@ def create_pack(
         excluded_categories=[
             "private signing keys",
             "agent-runs raw execution capsules",
+            "host filesystem paths from incident manifests",
             "unreferenced local .abl state",
         ],
         claims_boundary=(
@@ -237,8 +270,8 @@ def create_pack(
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, "w") as zf:
         for item in files:
-            source, _ = selected[item.path]
-            _zip_write(zf, item.path, source.read_bytes())
+            data, _ = entries[item.path]
+            _zip_write(zf, item.path, data)
         manifest_bytes = (
             json.dumps(summary.to_dict(), indent=2, sort_keys=True) + "\n"
         ).encode("utf-8")
@@ -247,9 +280,52 @@ def create_pack(
 
 
 def _validate_zip_name(name: str) -> None:
-    path = PurePosixPath(name)
-    if path.is_absolute() or ".." in path.parts or not name:
-        raise ValueError(f"unsafe ZIP member path: {name}")
+    _validate_archive_path(name)
+
+
+def _verify_portable_incident(
+    zf: zipfile.ZipFile,
+    *,
+    run_id: str,
+    names: set[str],
+) -> list[str]:
+    errors: list[str] = []
+    incident_name = f"reports/{run_id}.incident.json"
+    if incident_name not in names:
+        return errors
+    try:
+        incident = json.loads(zf.read(incident_name).decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return [f"portable incident manifest is unreadable: {exc}"]
+    if incident.get("schema_version") != 1 or incident.get("portable") is not True:
+        errors.append("portable incident manifest schema/portable marker is invalid")
+    if incident.get("source_run_id") != run_id:
+        errors.append("portable incident source_run_id mismatch")
+    artifacts = incident.get("artifacts", [])
+    if not isinstance(artifacts, list):
+        return [*errors, "portable incident artifacts must be a list"]
+    seen_roles: set[str] = set()
+    for index, item in enumerate(artifacts, start=1):
+        if not isinstance(item, dict):
+            errors.append(f"portable incident artifact {index}: malformed entry")
+            continue
+        role = str(item.get("role", ""))
+        member = str(item.get("path", ""))
+        expected = str(item.get("sha256", ""))
+        if not role or role in seen_roles:
+            errors.append(f"portable incident artifact {index}: missing or duplicate role")
+        seen_roles.add(role)
+        try:
+            _validate_zip_name(member)
+        except ValueError as exc:
+            errors.append(f"portable incident artifact {index}: {exc}")
+            continue
+        if member not in names:
+            errors.append(f"portable incident artifact {index}: missing ZIP member {member}")
+            continue
+        if _sha256_bytes(zf.read(member)) != expected:
+            errors.append(f"portable incident artifact {index}: digest mismatch for {role}")
+    return errors
 
 
 def verify_pack(path: str | Path) -> tuple[bool, list[str], dict[str, Any]]:
@@ -258,10 +334,11 @@ def verify_pack(path: str | Path) -> tuple[bool, list[str], dict[str, Any]]:
     details: dict[str, Any] = {}
     try:
         with zipfile.ZipFile(pack, "r") as zf:
-            names = zf.namelist()
-            if len(names) != len(set(names)):
+            names_list = zf.namelist()
+            names = set(names_list)
+            if len(names_list) != len(names):
                 errors.append("ZIP contains duplicate member names")
-            for name in names:
+            for name in names_list:
                 _validate_zip_name(name)
             if "pack-manifest.json" not in names:
                 return False, ["pack-manifest.json is missing"], {}
@@ -295,7 +372,7 @@ def verify_pack(path: str | Path) -> tuple[bool, list[str], dict[str, Any]]:
                     errors.append(f"file {index}: size mismatch for {member}")
                     continue
                 verified += 1
-            unexpected = sorted(set(names) - expected_names)
+            unexpected = sorted(names - expected_names)
             if unexpected:
                 errors.append("ZIP contains unmanifested members: " + ", ".join(unexpected))
             if any(name.endswith("attestation-private.json") for name in names):
@@ -307,12 +384,16 @@ def verify_pack(path: str | Path) -> tuple[bool, list[str], dict[str, Any]]:
                     if not isinstance(item, dict):
                         errors.append(f"linked incident artifact {index}: malformed entry")
                         continue
+                    if "source_path" in item:
+                        errors.append(f"linked incident artifact {index}: host source_path must not be exported")
                     archive = str(item.get("archive_path", ""))
                     if archive not in names:
                         errors.append(f"linked incident artifact {index}: missing {archive}")
                         continue
                     if _sha256_bytes(zf.read(archive)) != str(item.get("sha256", "")):
                         errors.append(f"linked incident artifact {index}: digest mismatch")
+
+            errors.extend(_verify_portable_incident(zf, run_id=run_id, names=names))
 
             with tempfile.TemporaryDirectory(prefix="abl-portable-pack-") as temp_dir:
                 temp = Path(temp_dir)
@@ -322,8 +403,8 @@ def verify_pack(path: str | Path) -> tuple[bool, list[str], dict[str, Any]]:
                     target = temp / Path(*PurePosixPath(name).parts)
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_bytes(zf.read(name))
-                evidence_dir = temp / "evidence" / run_id
-                bundle_ok, bundle_errors, bundle_summary = verify_bundle(evidence_dir)
+                embedded_evidence_dir = temp / "evidence" / run_id
+                bundle_ok, bundle_errors, bundle_summary = verify_bundle(embedded_evidence_dir)
                 if not bundle_ok:
                     errors.extend(f"embedded evidence: {error}" for error in bundle_errors)
 
@@ -375,7 +456,17 @@ def main(argv: list[str] | None = None) -> int:
                 output_path=args.output,
                 run_id=args.run_id,
             )
-            print(json.dumps({**summary.to_dict(), "pack": str(output), "pack_sha256": sha256_file(output)}, indent=2, sort_keys=True))
+            print(
+                json.dumps(
+                    {
+                        **summary.to_dict(),
+                        "pack": str(output),
+                        "pack_sha256": sha256_file(output),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
             return 0
         ok, errors, summary = verify_pack(args.pack)
         print(json.dumps(summary, indent=2, sort_keys=True))
