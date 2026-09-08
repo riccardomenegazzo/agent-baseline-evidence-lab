@@ -145,8 +145,15 @@ def create_pack(
                 f"refusing to export local filesystem path marker in {archive}; "
                 "persist evidence-safe relative references before customer handoff"
             )
-        if archive in entries and entries[archive] != (data, role):
-            raise ValueError(f"duplicate archive path: {archive}")
+        if archive in entries:
+            existing_data, _ = entries[archive]
+            if existing_data != data:
+                raise ValueError(f"duplicate archive path with conflicting content: {archive}")
+            # One physical ZIP member may legitimately satisfy multiple semantic
+            # references (for example, the assessment manifest is both evidence
+            # and an incident artifact). Keep the first canonical file role; the
+            # incident linkage is recorded separately with its own role + digest.
+            return archive
         entries[archive] = (data, role)
         return archive
 
