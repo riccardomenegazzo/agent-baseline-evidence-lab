@@ -9,6 +9,7 @@ from typing import Any
 
 from .evidence import sha256_file
 from .live_run import load_agent_run
+from .oci_integrity import verify_oci_layout_integrity
 from .trusted_artifact import verify_oci_attestations
 
 STATEMENT_TYPE = "https://in-toto.io/Statement/v1"
@@ -101,9 +102,19 @@ def create_lineage_statement(
     observed_archive = sha256_file(archive)
     if observed_archive != expected_archive:
         raise ValueError("trusted OCI archive digest does not match its report")
+
+    graph_ok, graph_errors, graph_summary = verify_oci_layout_integrity(archive)
+    if not graph_ok:
+        raise ValueError(
+            "trusted OCI archive failed recursive graph integrity verification: "
+            + "; ".join(graph_errors)
+        )
     oci_ok, oci_errors, oci_summary = verify_oci_attestations(archive)
     if not oci_ok:
-        raise ValueError("trusted OCI archive failed independent attestation verification: " + "; ".join(oci_errors))
+        raise ValueError(
+            "trusted OCI archive failed independent attestation verification: "
+            + "; ".join(oci_errors)
+        )
 
     task = session.get("task", {}) or {}
     execution = session.get("execution", {}) or {}
@@ -140,14 +151,17 @@ def create_lineage_statement(
                 "ociArchiveSha256": observed_archive,
                 "trustedArtifactStatus": str(trusted.get("overall_status", "")),
                 "scoutStatus": str(trusted.get("scout_status", "")),
+                "ociGraphIntegrityVerified": True,
+                "verifiedBlobCount": graph_summary.get("verified_blob_count", 0),
                 "ociAttestationsVerified": True,
                 "predicateTypes": oci_summary.get("predicate_types", []),
                 "subjectBindingsValid": oci_summary.get("subject_bindings_valid", False),
             },
             "claimsBoundary": (
                 "This statement proves a local cryptographic linkage from one verified agent-run capsule and its "
-                "unchanged post-task workspace to one independently verified OCI archive. It does not establish "
-                "human/signer identity, source completeness, model intent, official Docker conformance, or artifact deployment."
+                "unchanged post-task workspace to one independently verified OCI archive, including the referenced "
+                "manifest/config/layer graph and SBOM/provenance subject bindings. It does not establish human/signer "
+                "identity, source completeness, model intent, official Docker conformance, or artifact deployment."
             ),
         },
     }
