@@ -6,21 +6,36 @@ from pathlib import Path
 
 import pytest
 
+from agent_baseline_lab.evidence import EvidenceStore
+from agent_baseline_lab.portable_pack import create_pack
 from agent_baseline_lab.signing import generate_keypair, sign_file
+from agent_baseline_lab.trace import TraceLedger
 from agent_baseline_lab.trust_handoff import create_handoff_pack, verify_handoff_pack
 
 
-def _minimal_customer_pack(path: Path, run_id: str) -> None:
-    manifest = {
-        "schema_version": 1,
-        "source_run_id": run_id,
-        "files": [],
-        "linked_incident_artifacts": [],
-        "excluded_categories": ["private signing keys"],
-        "claims_boundary": "test fixture",
-    }
-    with zipfile.ZipFile(path, "w") as zf:
-        zf.writestr("pack-manifest.json", json.dumps(manifest))
+def _verified_customer_pack(root: Path, path: Path, run_id: str) -> None:
+    evidence = root / "evidence" / run_id
+    store = EvidenceStore(evidence)
+    trace = TraceLedger(evidence / "trace" / "events.ndjson", run_id)
+    trace.append(
+        "test_evidence",
+        actor="ci-fixture",
+        action="verify-handoff",
+        result="PASS",
+    )
+    store.write_json(
+        "assessment.json",
+        {
+            "run_id": run_id,
+            "metadata": {
+                "trace_head_sha256": trace.head_hash,
+                "trace_event_count": 1,
+            },
+            "results": [],
+        },
+    )
+    store.finalize_manifest()
+    create_pack(root, output_path=path, run_id=run_id)
 
 
 def _fixture(tmp_path: Path) -> tuple[Path, str, list[tuple[str, Path, str]]]:
@@ -36,7 +51,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, str, list[tuple[str, Path, str]]]:
         keys / "attestation-public.json",
     )
     golden = reports / f"{run_id}.customer-evidence-pack.zip"
-    _minimal_customer_pack(golden, run_id)
+    _verified_customer_pack(root, golden, run_id)
     golden_sig = reports / f"{run_id}.customer-evidence-pack.zip.ed25519.json"
     sign_file(golden, private_key, golden_sig)
 
@@ -116,7 +131,10 @@ def test_handoff_detects_member_tampering(tmp_path: Path) -> None:
 def test_handoff_rejects_local_path_leakage(tmp_path: Path) -> None:
     root, run_id, sources = _fixture(tmp_path)
     leaked = root / "reports" / "leaked.json"
-    leaked.write_text(json.dumps({"workspace": str(root / ".abl-workspaces" / "agent")}), encoding="utf-8")
+    leaked.write_text(
+        json.dumps({"workspace": str(root / ".abl-workspaces" / "agent")}),
+        encoding="utf-8",
+    )
     sources.append(("leaked", leaked, "leaked.json"))
 
     with pytest.raises(ValueError, match="local filesystem path marker"):
