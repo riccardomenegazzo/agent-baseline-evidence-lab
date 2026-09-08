@@ -253,6 +253,7 @@ def verify_oci_attestations(archive: Path) -> tuple[bool, list[str], dict[str, A
         "archive_sha256": sha256_file(archive) if archive.is_file() else "",
         "runnable_manifest_digests": [],
         "attestation_manifest_digests": [],
+        "verified_index_descriptors": [],
         "predicate_types": [],
         "statements": [],
         "subject_binding_failures": [],
@@ -272,20 +273,46 @@ def verify_oci_attestations(archive: Path) -> tuple[bool, list[str], dict[str, A
 
             runnable: list[str] = []
             attestation_descriptors: list[dict[str, Any]] = []
+            verified_descriptors: list[dict[str, Any]] = []
             for descriptor in descriptors:
                 if not isinstance(descriptor, dict):
+                    errors.append("OCI index contains a non-object descriptor")
                     continue
                 annotations = descriptor.get("annotations", {})
                 annotations = annotations if isinstance(annotations, dict) else {}
                 digest = str(descriptor.get("digest", ""))
+                if not digest:
+                    errors.append("OCI index descriptor is missing digest")
+                    continue
+                try:
+                    data, _ = _read_blob(tf, digest)
+                except ValueError as exc:
+                    errors.append(str(exc))
+                    continue
+                declared_size = descriptor.get("size")
+                size_matches = not isinstance(declared_size, int) or declared_size == len(data)
+                if not size_matches:
+                    errors.append(
+                        f"OCI descriptor size mismatch for {digest}: declared {declared_size}, observed {len(data)}"
+                    )
+                verified_descriptors.append(
+                    {
+                        "digest": digest,
+                        "declared_size": declared_size,
+                        "observed_size": len(data),
+                        "size_matches": size_matches,
+                        "attestation": annotations.get("vnd.docker.reference.type") == ATTESTATION_MANIFEST,
+                    }
+                )
                 if annotations.get("vnd.docker.reference.type") == ATTESTATION_MANIFEST:
                     attestation_descriptors.append(descriptor)
-                elif digest:
+                else:
                     runnable.append(digest)
             summary["runnable_manifest_digests"] = runnable
             summary["attestation_manifest_digests"] = [
                 str(item.get("digest", "")) for item in attestation_descriptors
             ]
+            summary["verified_index_descriptors"] = verified_descriptors
             if not runnable:
                 errors.append("OCI index contains no runnable image manifest")
             if not attestation_descriptors:
