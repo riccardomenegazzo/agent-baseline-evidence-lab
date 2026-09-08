@@ -42,6 +42,30 @@ jobs:
           assert payload['credential_revocation_tested'] is False
           assert payload['credential_evidence'] == {}
           PY
+      - name: Exercise provider revocation adapter in fail-closed dry-run mode
+        run: >-
+          python -m agent_baseline_lab.provider_revocation
+          docker-mcp-oauth dhi
+          --output reports/provider-revocation-dry.json
+      - name: Assert provider dry-run never claims revocation
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('reports/provider-revocation-dry.json').read_text())
+          assert payload['attempted'] is False
+          assert payload['local_credential_removed'] is False
+          assert payload['upstream_revocation_proven'] is False
+          assert payload['secret_material_persisted'] is False
+          PY
+      - name: Exercise non-agent fallback validation
+        run: >-
+          python -m agent_baseline_lab.fallback
+          --workspace sample-app
+          --reviewer ci-human-reviewer
+          --reason "agent disabled for CI fallback contract"
+          --command python3 -m unittest discover -s tests -v
+          --output reports/fallback.json
       - name: Exercise full interview orchestration without Docker mutation
         run: >-
           python -m agent_baseline_lab.interview_demo
@@ -67,7 +91,6 @@ jobs:
           set +e
           abl assess --config examples/agent.yaml
           rc=$?
-          # FAIL is meaningful assessment output; evaluator errors would still be visible in the report.
           test "$rc" -eq 0 -o "$rc" -eq 1
       - name: Verify generated evidence bundle
         run: |
@@ -86,16 +109,10 @@ jobs:
           from pathlib import Path
           payload = json.loads(Path('reports/evidence-verification-matrix.json').read_text())
           scenarios = {item['id']: item for item in payload['scenarios']}
-
           assert scenarios['single-file-alteration']['internal_verifier_passed'] is False
           assert scenarios['trace-truncation']['internal_verifier_passed'] is False
-
-          # A producer that rewrites every local anchor can create a self-consistent bundle.
-          # The original external digest/head must still detect that rewrite.
           assert scenarios['coordinated-rewrite']['internal_verifier_passed'] is True
           assert scenarios['coordinated-rewrite']['externally_anchored_verifier_passed'] is False
-
-          # Artifact integrity alone cannot reveal a source event that never entered the export.
           assert scenarios['event-never-emitted']['internal_verifier_passed'] is True
           assert scenarios['event-never-emitted']['externally_anchored_verifier_passed'] is True
           PY
@@ -106,6 +123,21 @@ jobs:
           abl verify-attestation \
             "reports/${run_id}.attestation.json" \
             "${latest}/manifest.sha256.json"
+      - name: Sign and verify the generated run attestation with an ephemeral CI Ed25519 key
+        run: |
+          latest=$(ls -1dt evidence/abl-* | head -1)
+          run_id=$(basename "$latest")
+          python -m agent_baseline_lab.signing keygen \
+            --private .abl/ci-signing/private.json \
+            --public .abl/ci-signing/public.json
+          python -m agent_baseline_lab.signing sign \
+            "reports/${run_id}.attestation.json" \
+            --private .abl/ci-signing/private.json \
+            --output "reports/${run_id}.attestation.ed25519.json"
+          python -m agent_baseline_lab.signing verify \
+            "reports/${run_id}.attestation.json" \
+            "reports/${run_id}.attestation.ed25519.json" \
+            --public .abl/ci-signing/public.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
