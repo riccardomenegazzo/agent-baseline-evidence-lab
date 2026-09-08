@@ -1,5 +1,7 @@
 # Roadmap
 
+This roadmap separates **implemented capability** from **live evidence already collected**. A checked item means the mechanism exists in the repository and is covered by tests/CI where practical; it does not imply that a Docker AI Governance organization has produced the corresponding live event yet.
+
 ## V0.3 — evidence-driven customer PoC ✅
 
 - [x] 35-control catalogue for Agent Baseline v1.0-draft
@@ -35,33 +37,86 @@
 
 ## V0.5 — governed MCP execution evidence
 
-- [ ] capture a real Docker AI Governance `tool_invocation` + `tool_execution` pair
-- [ ] derive or propagate a stronger cross-system correlation key between agent task and Docker audit session
-- [ ] `sbx mcp` registration inventory adapter with identity/URL matching
-- [ ] correlate evaluation → approval/deny → tool execution outcome
-- [ ] test explicit `invokePrimordial` restrictions for dynamic gateway tools
-- [ ] direct-MCP bypass scenario mapped jointly to MCP + network policy
-- [ ] evidence model for OAuth authorization state without collecting secrets
-- [ ] OBS-03 drift baseline for destinations/tool use/resource consumption
-- [ ] OBS-04 unintended-action detector for credential/code co-commit scenarios
+### Implemented and testable
 
-## V0.6 — response exercise
+- [x] `sbx mcp` registration inventory adapter with identity/URL matching
+- [x] documented-table fallback for `sbx mcp ls`
+- [x] run-scoped Docker audit correlation marker
+- [x] bounded evaluation → approval/deny → execution chain analyzer
+- [x] explicit `invokePrimordial` permit-vs-forbid analysis
+- [x] regression test that DHI policy forbids `mcp-add` and `code-mode`
+- [x] direct-MCP bypass policy probe, separate from host-side gateway traffic
+- [x] metadata-only OAuth authorization-state adapter
+- [x] recursive redaction of token/secret/password/cookie/authorization fields
+- [x] OBS-03 behavioral drift baseline for event types, destinations and MCP targets
+- [x] OBS-04 credential-sensitive path + code co-change detector
 
-- [ ] tested sandbox stop circuit breaker
-- [ ] credential/permit revocation evidence adapter where available
-- [ ] component quarantine registry
-- [ ] evidence-preserving incident bundle
-- [ ] tested non-agent fallback workflow
+### Live evidence still required
 
-## Trust hardening
+- [ ] collect a real Docker AI Governance `tool_invocation` + `tool_execution` pair from a governed organization
+- [ ] obtain an `exact-marker` correlation result from finalized Docker audit JSONL
+- [ ] exercise a real evaluation → approval/deny → execution sequence and preserve all source event IDs
+- [ ] live-test direct-MCP bypass prevention against the actual installed `sbx` network policy lifecycle
+- [ ] confirm the installed Docker Sandboxes CLI lifecycle for static MCP preloading before changing provisioning semantics
 
-- [ ] portable digital signature for the final evidence anchor
-- [ ] optional transparency-log publication
-- [ ] signed baseline-source lock
-- [ ] evidence schema versioning and migration tests
+The action-chain analyzer intentionally reports **bounded correlation**, not strict causality, because Docker currently documents unique event IDs and daemon-session IDs but no request-level causal identifier.
+
+## V0.6 — response and incident evidence ✅
+
+- [x] tested sandbox stop circuit breaker with postcondition verification
+- [x] disposable sandbox-scoped credential-binding revocation
+- [x] explicit Docker MCP OAuth removal adapter with fail-closed dry-run default
+- [x] provider-revocation claims boundary: local credential removal != server-side token invalidation
+- [x] immutable assessment → response digest link
+- [x] independent response-link verifier
+- [x] append-only quarantine registry
+- [x] evidence-preserving incident bundle with per-artifact SHA-256
+- [x] automatic quarantine + incident bundle creation in the live manager flow
+- [x] tested non-agent fallback workflow
+- [x] dry-run regression tests that forbid positive containment/revocation/quarantine/incident claims
+
+## V0.7 — independent assurance and trust hardening ✅
+
+### Integrity and independent verification
+
+- [x] adversarial evidence-verification matrix
+- [x] single-file alteration detection
+- [x] trace-truncation detection
+- [x] coordinated-rewrite test proving the limitation of self-consistent local anchors
+- [x] external digest anchor detecting coordinated rewrite
+- [x] explicit `event-never-emitted` completeness limitation
+- [x] external completeness-witness reconciliation
+- [x] Ed25519 signing backend for exact evidence artifacts
+- [x] externally supplied public-key verification
+- [x] negative signature tests for subject mutation and wrong key
+
+### Baseline and schema trust
+
+- [x] baseline-source lock containing source digest, control IDs, version/status and drift
+- [x] independent baseline-lock verifier before signing
+- [x] Ed25519-signable baseline lock workflow
+- [x] evidence schema versioning
+- [x] fail-closed migrations that never invent positive claims
+- [x] future/unknown schema rejection
+- [x] `.abl/` excluded from Git to protect local signing keys and response state
+
+### Still pending
+
+- [ ] optional public transparency-log publication (for example Sigstore/Rekor) using a format verified to be interoperable with the chosen log client
+- [ ] external/keyless identity binding for the signing key rather than local possession alone
+- [ ] provider-specific server-side revocation adapters only where a provider exposes a verifiable revocation postcondition
+
+The repository deliberately does **not** call the local Ed25519 key identity an external identity, and does not mark transparency logging complete until the signature representation is confirmed interoperable with a supported publication path.
 
 ## Upstream objective
 
-Use reproducible implementation friction to propose a narrowly evidenced issue or PR to the Agent Baseline project. Do not manufacture feedback merely for visibility.
+Use reproducible implementation friction to propose narrowly evidenced Agent Baseline test methods or control feedback. Do not manufacture feedback merely for visibility.
 
-The immediate upstream-quality milestone is a reproducible real governance run containing an MCP evaluation/execution pair **without leaking prompt content, credentials, or customer-sensitive metadata**.
+Current upstream-quality material includes:
+
+- the independent-evidence verification matrix;
+- the coordinated-rewrite result;
+- the completeness-witness model;
+- the explicit distinction between integrity, external anchoring and source completeness.
+
+The strongest next upstream milestone remains a reproducible **real Docker AI Governance run** containing governed MCP evaluation/execution evidence without leaking prompt content, credentials, or customer-sensitive metadata.
