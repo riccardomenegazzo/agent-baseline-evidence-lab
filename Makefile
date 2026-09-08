@@ -1,8 +1,7 @@
 .PHONY: install test lint preflight readiness readiness-mcp baseline-sync baseline-lock-verify baseline-lock-sign baseline-lock-verify-signature \
-	assess demo verify assurance-latest evidence-matrix customer-pack customer-pack-verify audit-summary \
-	live-dry-run live-demo live-demo-mcp mcp-register-dhi mcp-inventory-dhi mcp-bypass-dhi mcp-oauth-status \
-	sandbox-create sandbox-run sandbox-shell sandbox-rm \
-	response-drill response-drill-full response-drill-dry-run response-link response-link-verify \
+	assess demo verify assurance-latest evidence-matrix governance-delta governance-delta-verify governance-delta-sign governance-delta-sign-verify \
+	customer-pack customer-pack-verify audit-summary live-dry-run live-demo live-demo-mcp mcp-register-dhi mcp-inventory-dhi mcp-bypass-dhi mcp-oauth-status \
+	sandbox-create sandbox-run sandbox-shell sandbox-rm response-drill response-drill-full response-drill-dry-run response-link response-link-verify \
 	interview-demo interview-demo-mcp interview-demo-dry-run golden-demo golden-demo-mcp golden-demo-dry-run \
 	audit-correlate-latest audit-correlate-exact signing-keygen sign-latest verify-signature-latest \
 	drift-baseline drift-compare unintended-latest fallback-demo quarantine-latest incident-bundle-latest \
@@ -16,6 +15,8 @@ MCP_HOST ?= dhi.io
 MCP_SERVER ?= dhi
 BASELINE_CACHE ?= .cache/agentbaseline
 CUSTOMER_PACK ?= reports/customer-evidence-pack.zip
+DELTA_JSON ?= reports/governance-delta.json
+DELTA_HTML ?= reports/governance-delta.html
 
 install:
 	python3 -m venv $(VENV)
@@ -80,6 +81,26 @@ evidence-matrix:
 	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
 	$(PYTHON) -m agent_baseline_lab.evidence_matrix "$$latest" \
 		--output reports/evidence-verification-matrix.json
+
+governance-delta:
+	@if [ -z "$(BEFORE)" ] || [ -z "$(AFTER)" ]; then echo "Usage: make governance-delta BEFORE=evidence/abl-before AFTER=evidence/abl-after"; exit 1; fi
+	$(PYTHON) -m agent_baseline_lab.governance_delta create \
+		"$(BEFORE)" "$(AFTER)" --output "$(DELTA_JSON)" --html "$(DELTA_HTML)"
+
+governance-delta-verify:
+	@if [ -z "$(BEFORE)" ] || [ -z "$(AFTER)" ]; then echo "Usage: make governance-delta-verify BEFORE=evidence/abl-before AFTER=evidence/abl-after"; exit 1; fi
+	$(PYTHON) -m agent_baseline_lab.governance_delta verify \
+		"$(DELTA_JSON)" "$(BEFORE)" "$(AFTER)"
+
+governance-delta-sign: governance-delta
+	@if [ ! -f .abl/keys/attestation-private.json ]; then echo "Run make signing-keygen first"; exit 1; fi
+	$(PYTHON) -m agent_baseline_lab.signing sign "$(DELTA_JSON)" \
+		--private .abl/keys/attestation-private.json \
+		--output "$(DELTA_JSON).ed25519.json"
+
+governance-delta-sign-verify:
+	$(PYTHON) -m agent_baseline_lab.signing verify "$(DELTA_JSON)" \
+		"$(DELTA_JSON).ed25519.json" --public .abl/keys/attestation-public.json
 
 customer-pack: assurance-latest
 	$(PYTHON) -m agent_baseline_lab.portable_pack create \
