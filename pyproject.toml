@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-baseline-evidence-lab"
-version = "0.6.0"
+version = "0.7.0"
 description = "Evidence-driven implementation assessment for the Agent Baseline v1.0-draft, with Docker Sandboxes adapters."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 authors = [{name = "Riccardo Menegazzo"}]
-dependencies = ["PyYAML>=6.0.2,<7"]
+dependencies = ["PyYAML>=6.0.2,<7", "cryptography>=46,<47"]
 keywords = ["docker", "ai-agents", "security", "mcp", "agent-baseline", "evidence"]
 classifiers = [
   "Development Status :: 3 - Alpha",
