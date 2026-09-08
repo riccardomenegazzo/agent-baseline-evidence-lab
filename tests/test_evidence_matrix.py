@@ -75,5 +75,9 @@ def test_verification_matrix_exposes_distinct_trust_boundaries(tmp_path: Path):
     assert never_emitted.alteration_detected_with_external_anchor is False
 
     assert summary["scenario_count"] == 4
+    assert summary["source_evidence"] == "evidence/abl-test"
+    assert str(tmp_path) not in json.dumps(summary)
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["summary"]["source_trace_event_count"] == 3
+    assert payload["summary"]["source_evidence"] == "evidence/abl-test"
+    assert str(tmp_path) not in output.read_text(encoding="utf-8")
