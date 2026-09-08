@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from agent_baseline_lab.mcp_bypass import probe_direct_mcp_bypass
-from agent_baseline_lab.mcp_inventory import McpRegistration, evaluate_inventory, parse_mcp_inventory
+from agent_baseline_lab.mcp_inventory import (
+    McpRegistration,
+    evaluate_inventory,
+    parse_mcp_inventory,
+    parse_mcp_table,
+)
 
 
 def test_mcp_inventory_identity_matching() -> None:
@@ -29,6 +34,18 @@ def test_mcp_inventory_identity_matching() -> None:
         observed=True,
     )
     assert mismatch.identity_mismatches
+
+
+def test_documented_mcp_ls_table_is_parsed() -> None:
+    table = """NAME                 TYPE     URL/COMMAND
+dhi                  remote   https://dhi.io/mcp
+local-helper         local    docker run helper
+"""
+    registrations = parse_mcp_table(table)
+    assert [(item.name, item.transport, item.url) for item in registrations] == [
+        ("dhi", "remote", "https://dhi.io/mcp"),
+        ("local-helper", "local", "docker run helper"),
+    ]
 
 
 def test_mcp_bypass_dry_run_never_claims_blocked() -> None:
