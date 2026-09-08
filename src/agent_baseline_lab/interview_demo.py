@@ -13,6 +13,7 @@ from .evidence import sha256_file, verify_bundle
 from .incident_bundle import create_incident_bundle, verify_incident_bundle
 from .live_run import cleanup_sandbox, run_agent_task
 from .models import Status
+from .privacy import portable_path
 from .quarantine import create_quarantine_entry, verify_registry
 from .response import run_stop_drill
 from .response_link import create_response_link
@@ -140,6 +141,7 @@ def run_interview_demo(
     correlation_strength = "not-requested"
     correlation_exact = False
     correlation_report = ""
+    correlation_report_path: Path | None = None
     if enable_audit and correlation_probe is not None:
         correlation_report_path = root / "reports" / f"{report.run_id}.audit-correlation.json"
         correlation_report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -175,7 +177,7 @@ def run_interview_demo(
             json.dumps(correlation_payload, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-        correlation_report = str(correlation_report_path)
+        correlation_report = portable_path(root, correlation_report_path)
 
     quarantine_registered = False
     quarantine_registry = ""
@@ -195,7 +197,7 @@ def run_interview_demo(
         if not registry_ok:
             raise RuntimeError("quarantine registry verification failed: " + "; ".join(registry_errors))
         quarantine_registered = True
-        quarantine_registry = str(registry_path)
+        quarantine_registry = portable_path(root, registry_path)
 
         incident_path = root / "reports" / f"{report.run_id}.incident.json"
         artifacts: list[tuple[str, str | Path]] = [
@@ -205,8 +207,8 @@ def run_interview_demo(
             ("response-link", link_path),
             ("quarantine-registry", registry_path),
         ]
-        if correlation_report:
-            artifacts.append(("audit-correlation", correlation_report))
+        if correlation_report_path is not None:
+            artifacts.append(("audit-correlation", correlation_report_path))
         create_incident_bundle(
             incident_path,
             source_run_id=report.run_id,
@@ -215,7 +217,7 @@ def run_interview_demo(
         incident_ok, incident_errors, _ = verify_incident_bundle(incident_path)
         if not incident_ok:
             raise RuntimeError("incident bundle verification failed: " + "; ".join(incident_errors))
-        incident_bundle_path = str(incident_path)
+        incident_bundle_path = portable_path(root, incident_path)
         incident_bundle_verified = True
 
     cleanup_attempted = False
@@ -235,11 +237,11 @@ def run_interview_demo(
         session_id=live.session_id,
         sandbox=live.sandbox_name,
         assessment_run_id=report.run_id,
-        assessment_json=str(assessment_json),
-        assessment_html=str(assessment_html),
-        assessment_evidence=str(assessment_evidence),
-        response_evidence=str(response_path),
-        response_link=str(link_path) if not dry_run else "",
+        assessment_json=portable_path(root, assessment_json),
+        assessment_html=portable_path(root, assessment_html),
+        assessment_evidence=portable_path(root, assessment_evidence),
+        response_evidence=portable_path(root, response_path),
+        response_link=portable_path(root, link_path) if not dry_run else "",
         response_link_sha256=link_sha256,
         assessment_bundle_verified=bundle_ok,
         response_link_verified=link_verified,
