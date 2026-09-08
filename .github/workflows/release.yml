@@ -10,10 +10,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version without the v prefix (for example 0.13.0)"
+        description: "Release version without the v prefix (for example 0.13.1)"
         required: true
         type: string
-        default: "0.13.0"
+        default: "0.13.1"
 
 permissions:
   contents: write

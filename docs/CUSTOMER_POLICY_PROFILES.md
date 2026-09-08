@@ -20,23 +20,38 @@ manual or partial controls.
 Keeping policy outside the evidence model prevents a customer-specific threshold from being
 misrepresented as an observed security fact.
 
-## Included examples
+## Built-in profiles
 
-- `policies/customer-trust/poc-observe.yaml` — permits `CONDITIONAL` or `EVIDENCE_READY`,
-  requires a verified artifact and passing independent assurance, and forbids `FAIL`/`ERROR`.
-- `policies/customer-trust/enterprise-strict.yaml` — requires `EVIDENCE_READY`, verified artifact,
-  Docker Scout `PASS`, assurance `PASS`, and zero `FAIL`/`ERROR`/`PARTIAL`/`MANUAL`.
+The release wheel contains two deliberately different example profiles:
 
-These are examples, not Docker recommendations or compliance standards.
+- `builtin:poc-observe` — permits `CONDITIONAL` or `EVIDENCE_READY`, requires a verified artifact and
+  passing independent assurance, and forbids `FAIL`/`ERROR`;
+- `builtin:enterprise-strict` — requires `EVIDENCE_READY`, verified artifact, Docker Scout `PASS`,
+  assurance `PASS`, and zero `FAIL`/`ERROR`/`PARTIAL`/`MANUAL`.
+
+They are examples, not Docker recommendations or compliance standards.
+
+List or export them from any installed wheel:
+
+```bash
+abl-policy list-profiles
+abl-policy export-profile enterprise-strict --output customer-policy.yaml
+```
+
+The repository also keeps readable copies under `policies/customer-trust/`.
 
 ## Evaluate
 
+A built-in profile can be used without exporting it:
+
 ```bash
 abl-policy evaluate \
-  policies/customer-trust/enterprise-strict.yaml \
+  builtin:enterprise-strict \
   reports/<run-id>.trust/customer-decision.portable.json \
   --output reports/<run-id>.trust/customer-policy-evaluation.json
 ```
+
+Or use an explicit customer-owned YAML file instead of `builtin:<name>`.
 
 Exit code is non-zero when the supplied decision does not satisfy the profile.
 
@@ -49,7 +64,7 @@ left unchanged.
 ```bash
 abl-policy verify \
   reports/<run-id>.trust/customer-policy-evaluation.json \
-  policies/customer-trust/enterprise-strict.yaml \
+  builtin:enterprise-strict \
   reports/<run-id>.trust/customer-decision.portable.json
 ```
 
@@ -76,7 +91,7 @@ requirements:
 ```
 
 Unknown requirement names, unknown assessment statuses, negative thresholds, malformed allowed
-lists, and unsupported schema versions fail closed.
+lists, unsupported built-in names, and unsupported schema versions fail closed.
 
 ## Claims boundary
 

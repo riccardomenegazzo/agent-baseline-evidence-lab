@@ -28,11 +28,14 @@ First produce a signed Customer Trust Handoff with `abl-trust`. Then select an e
 abl-accept create \
   --handoff reports/<run-id>.customer-trust-handoff.zip \
   --handoff-signature reports/<run-id>.customer-trust-handoff.zip.ed25519.json \
-  --policy policies/customer-trust/enterprise-strict.yaml \
+  --policy builtin:enterprise-strict \
   --output reports/<run-id>.customer-acceptance-envelope.zip
 ```
 
-By default the command uses the local Agent Baseline Evidence Lab Ed25519 keypair under `.abl/keys/`.
+`--policy` accepts either `builtin:<name>` from the profiles packaged in the wheel or a path to a
+customer-owned YAML profile. By default the command uses the local Agent Baseline Evidence Lab
+Ed25519 keypair under `.abl/keys/`.
+
 Creation fails closed when:
 
 - the source handoff does not verify;
@@ -52,7 +55,7 @@ The deterministic-member ZIP contains:
 - the original Customer Trust Handoff;
 - its Ed25519 signature;
 - the public verification key;
-- the exact customer policy YAML;
+- the exact customer policy YAML (including the exact bytes of a selected built-in profile);
 - a recomputable customer policy evaluation;
 - the evaluation signature;
 - an acceptance statement binding the handoff digest, decision digest, policy digest and evaluation
