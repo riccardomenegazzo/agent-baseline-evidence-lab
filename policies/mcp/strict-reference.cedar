@@ -34,4 +34,17 @@ forbid (principal, action == MCP::Action::"invokePrimordial", resource)
 when { resource in MCP::Primordial::"mcp-add" };
 
 forbid (principal, action == MCP::Action::"invokePrimordial", resource)
+when { resource in MCP::Primordial::"mcp-exec" };
+
+forbid (principal, action == MCP::Action::"invokePrimordial", resource)
+when { resource in MCP::Primordial::"mcp-find" };
+
+forbid (principal, action == MCP::Action::"invokePrimordial", resource)
+when { resource in MCP::Primordial::"mcp-config-set" };
+
+forbid (principal, action == MCP::Action::"invokePrimordial", resource)
 when { resource in MCP::Primordial::"code-mode" };
+
+// Example OAuth helper is also explicitly denied in the strict posture.
+forbid (principal, action == MCP::Action::"invokePrimordial", resource)
+when { resource in MCP::Primordial::"example-authorize" };
