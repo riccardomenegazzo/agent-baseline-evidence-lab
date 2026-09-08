@@ -64,10 +64,6 @@ def _latest_dir(root: Path, pattern: str) -> Path | None:
     return _latest([path for path in root.glob(pattern) if path.is_dir()])
 
 
-def _latest_file(root: Path, pattern: str) -> Path | None:
-    return _latest([path for path in root.glob(pattern) if path.is_file()])
-
-
 def run_assurance_suite(root_path: str | Path = ".") -> AssuranceSummary:
     root = Path(root_path).resolve()
     evidence_dir = _latest_dir(root / "evidence", "abl-*")
@@ -98,6 +94,7 @@ def run_assurance_suite(root_path: str | Path = ".") -> AssuranceSummary:
         and scenario_map["coordinated-rewrite"].internal_verifier_passed is True
         and scenario_map["coordinated-rewrite"].externally_anchored_verifier_passed is False
         and scenario_map["event-never-emitted"].internal_verifier_passed is True
+        and scenario_map["event-never-emitted"].externally_anchored_verifier_passed is True
     )
     checks.append(
         AssuranceCheck(
@@ -112,19 +109,27 @@ def run_assurance_suite(root_path: str | Path = ".") -> AssuranceSummary:
     )
 
     agent_run = _latest_dir(root / "agent-runs", "agent-*")
-    if agent_run is not None:
-        changes_path = agent_run / "workspace-changes.json"
-        if changes_path.exists():
-            changes = json.loads(changes_path.read_text(encoding="utf-8"))
-            unintended = analyze_changed_paths(changes)
-            checks.append(
-                AssuranceCheck(
-                    name="credential-sensitive-co-change",
-                    status="FINDING" if unintended.co_change_detected else "PASS",
-                    blocking=False,
-                    details=unintended.to_dict(),
-                )
+    changes_path = agent_run / "workspace-changes.json" if agent_run is not None else None
+    if changes_path is not None and changes_path.exists():
+        changes = json.loads(changes_path.read_text(encoding="utf-8"))
+        unintended = analyze_changed_paths(changes)
+        checks.append(
+            AssuranceCheck(
+                name="credential-sensitive-co-change",
+                status="FINDING" if unintended.co_change_detected else "PASS",
+                blocking=False,
+                details=unintended.to_dict(),
             )
+        )
+    else:
+        checks.append(
+            AssuranceCheck(
+                name="credential-sensitive-co-change",
+                status="NOT_RUN",
+                blocking=False,
+                details={"reason": "no workspace change evidence for latest agent run"},
+            )
+        )
 
     baseline_path = root / ".abl" / "baselines" / "behavior.json"
     trace_path = evidence_dir / "trace" / "events.ndjson"
@@ -165,6 +170,29 @@ def run_assurance_suite(root_path: str | Path = ".") -> AssuranceSummary:
                 details={"errors": signature_errors, **signature_summary},
             )
         )
+        if public_key.exists():
+            checks.append(
+                AssuranceCheck(
+                    name="external-signing-anchor",
+                    status="PASS" if signature_ok else "FAIL",
+                    blocking=True,
+                    details={
+                        "public_key": str(public_key),
+                        "key_id": signature_summary.get("key_id"),
+                    },
+                )
+            )
+        else:
+            checks.append(
+                AssuranceCheck(
+                    name="external-signing-anchor",
+                    status="NOT_RUN",
+                    blocking=False,
+                    details={
+                        "reason": "signature verified only against the envelope-embedded public key"
+                    },
+                )
+            )
     else:
         checks.append(
             AssuranceCheck(
@@ -172,6 +200,14 @@ def run_assurance_suite(root_path: str | Path = ".") -> AssuranceSummary:
                 status="NOT_RUN",
                 blocking=False,
                 details={"reason": "no signature envelope for latest attestation"},
+            )
+        )
+        checks.append(
+            AssuranceCheck(
+                name="external-signing-anchor",
+                status="NOT_RUN",
+                blocking=False,
+                details={"reason": "no signed latest attestation"},
             )
         )
 
@@ -186,6 +222,15 @@ def run_assurance_suite(root_path: str | Path = ".") -> AssuranceSummary:
                 details={"errors": incident_errors, **incident_summary},
             )
         )
+    else:
+        checks.append(
+            AssuranceCheck(
+                name="incident-bundle",
+                status="NOT_RUN",
+                blocking=False,
+                details={"reason": "no incident bundle for latest assessment"},
+            )
+        )
 
     registry = root / ".abl" / "quarantine" / "registry.ndjson"
     if registry.exists():
@@ -196,6 +241,15 @@ def run_assurance_suite(root_path: str | Path = ".") -> AssuranceSummary:
                 status="PASS" if registry_ok else "FAIL",
                 blocking=True,
                 details={"errors": registry_errors, **registry_summary},
+            )
+        )
+    else:
+        checks.append(
+            AssuranceCheck(
+                name="quarantine-registry",
+                status="NOT_RUN",
+                blocking=False,
+                details={"reason": "no quarantine registry"},
             )
         )
 
@@ -212,6 +266,7 @@ def run_assurance_suite(root_path: str | Path = ".") -> AssuranceSummary:
         overall_status=overall,
         claims_boundary=(
             "This suite verifies the latest locally available evidence and highlights non-blocking risk signals. "
+            "A cryptographically valid envelope is distinct from an externally trusted signing identity. "
             "PASS does not imply Agent Baseline conformance, source completeness, external key identity, or live Docker AI Governance coverage that was not collected."
         ),
     )
