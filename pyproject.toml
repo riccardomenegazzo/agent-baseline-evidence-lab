@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{name = "Riccardo Menegazzo"}]
-dependencies = ["PyYAML>=6.0.2,<7", "cryptography>=46,<47"]
+dependencies = ["PyYAML>=6.0.2,<7", "cryptography>=46,<51"]
 keywords = ["docker", "docker-sandboxes", "docker-scout", "ai-agents", "security", "governance", "mcp", "sbom", "slsa", "provenance", "oci", "agent-baseline", "evidence"]
 classifiers = [
   "Development Status :: 3 - Alpha",
