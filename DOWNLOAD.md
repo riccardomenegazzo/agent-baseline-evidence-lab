@@ -8,22 +8,22 @@ Open:
 
 https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/releases/latest
 
-For v0.9.0 directly:
+Current release, v0.10.0:
 
-https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/releases/tag/v0.9.0
+https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/releases/tag/v0.10.0
 
 ## Which file should I download?
 
 For normal installation, download the Python wheel:
 
 ```text
-agent_baseline_evidence_lab-0.9.0-py3-none-any.whl
+agent_baseline_evidence_lab-0.10.0-py3-none-any.whl
 ```
 
 The release also contains:
 
 ```text
-agent_baseline_evidence_lab-0.9.0.tar.gz
+agent_baseline_evidence_lab-0.10.0.tar.gz
 SHA256SUMS
 release-manifest.json
 ```
@@ -40,7 +40,7 @@ GitHub additionally exposes standard source-code `.zip` and `.tar.gz` archives f
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install ./agent_baseline_evidence_lab-0.9.0-py3-none-any.whl
+pip install ./agent_baseline_evidence_lab-0.10.0-py3-none-any.whl
 abl --help
 ```
 
