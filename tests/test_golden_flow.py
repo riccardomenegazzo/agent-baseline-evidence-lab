@@ -36,6 +36,25 @@ def test_live_golden_flow_fails_closed_on_readiness_failure(tmp_path: Path, monk
         golden_flow.run_golden_flow(tmp_path, dry_run=False)
 
 
+def test_live_golden_flow_requires_signed_baseline_lock(tmp_path: Path, monkeypatch) -> None:
+    _keys(tmp_path)
+    cache = tmp_path / ".cache" / "agentbaseline"
+    cache.mkdir(parents=True)
+    (cache / "baseline.lock.json").write_text('{"schema_version":1}\n', encoding="utf-8")
+    monkeypatch.setattr(
+        golden_flow,
+        "run_readiness",
+        lambda *args, **kwargs: SimpleNamespace(
+            ready=True,
+            checks=[],
+            to_dict=lambda: {"ready": True},
+        ),
+    )
+
+    with pytest.raises(ValueError, match="baseline-lock-sign"):
+        golden_flow.run_golden_flow(tmp_path, dry_run=False)
+
+
 def test_dry_run_golden_flow_skips_live_readiness_but_signs_handoff(
     tmp_path: Path,
     monkeypatch,
@@ -100,6 +119,8 @@ def test_dry_run_golden_flow_skips_live_readiness_but_signs_handoff(
     assert summary.dry_run is True
     assert summary.readiness_checked is False
     assert summary.readiness_ready is None
+    assert summary.baseline_signature_checked is False
+    assert summary.baseline_signature_verified is None
     assert summary.assessment_run_id == run_id
     assert summary.response_link_verified is False
     assert summary.quarantine_registered is False
