@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agent-baseline-evidence-lab"
 version = "0.10.2"
-description = "Evidence-driven assessment and controlled before/after validation for AI coding-agent governance with Docker Sandboxes."
+description = "Evidence-driven AI coding-agent governance from Docker Sandbox execution to verifiable OCI artifact lineage and signed customer handoff."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{name = "Riccardo Menegazzo"}]
 dependencies = ["PyYAML>=6.0.2,<7", "cryptography>=46,<47"]
-keywords = ["docker", "docker-sandboxes", "ai-agents", "security", "governance", "mcp", "agent-baseline", "evidence"]
+keywords = ["docker", "docker-sandboxes", "docker-scout", "ai-agents", "security", "governance", "mcp", "sbom", "slsa", "provenance", "oci", "agent-baseline", "evidence"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Operating System :: OS Independent",
@@ -34,6 +34,7 @@ dev = ["pytest>=8.3,<9", "ruff>=0.12,<1", "build>=1.2,<2"]
 
 [project.scripts]
 abl = "agent_baseline_lab.cli:main"
+abl-trust = "agent_baseline_lab.customer_trust_flow:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
