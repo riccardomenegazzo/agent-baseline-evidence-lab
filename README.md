@@ -1,299 +1,157 @@
 # Agent Baseline Evidence Lab
 
 [![CI](https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/riccardomenegazzo/agent-baseline-evidence-lab?display_name=tag)](https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/releases/latest)
+[![Python](https://img.shields.io/badge/python-%3E%3D3.11-blue)](pyproject.toml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-**Turn the Agent Baseline v1.0-draft into reproducible implementation evidence for a real AI coding-agent environment.**
+**A customer-ready reference PoC for turning AI-agent governance requirements into reproducible, independently verifiable evidence.**
 
 > Community project. Not an official Docker, Snyk, Keycard, or Agent Baseline project. It does **not** issue certifications or claim official conformance.
 
-AI-agent security guidance is easy to describe and much harder to prove. This lab asks a narrower question:
+AI-agent security guidance is easy to describe and much harder to prove. This project asks a narrower question:
 
 > **For this agent, in this environment, during this run: what can we actually prove?**
 
-The repository maps the 35 draft Agent Baseline controls to declared state, Docker Sandboxes probes, executable adversarial scenarios, Docker MCP Cedar-policy analysis, optional Docker AI Governance audit records, artifact validation, response drills, cryptographic evidence, and explicit manual gaps.
+It uses the **Agent Baseline v1.0-draft** as a control vocabulary and **Docker Sandboxes** as the primary execution surface. The lab maps all 35 draft controls to declared state, runtime observations, bounded adversarial scenarios, MCP policy evidence, validation results, response evidence and explicit gaps.
 
-Every assessment produces evidence rather than a marketing score.
-
----
-
-## The manager-facing path
-
-For the community path, after installation and Docker Sandboxes authentication:
-
-```bash
-make interview-demo
-```
-
-The flow is intentionally evidence-first:
-
-```text
-real coding task
-      │
-      ▼
-Codex in a unique Docker Sandbox
-      │
-      ▼
-Agent Baseline assessment
-      │
-      ├── live sbx boundary probes
-      ├── adversarial scenarios
-      ├── artifact validation
-      ├── MCP policy evidence
-      └── optional Docker audit evidence
-      │
-      ▼
-immutable assessment bundle
-      │
-      ▼
-disposable response drill
-      ├── create sandbox-scoped test credential binding
-      ├── observe binding
-      ├── revoke binding
-      ├── verify binding is absent
-      ├── stop the exact sandbox from this run
-      └── verify stopped state
-      │
-      ▼
-response evidence
-      │
-      ├── response-link by SHA-256
-      ├── quarantine registry entry
-      └── digest-only incident bundle
-      │
-      ▼
-independent verification
-      │
-      ▼
-remove only the unique disposable sandbox
-```
-
-The response flow uses the **actual unique sandbox identity created for the live agent run**. It never substitutes a fixed sandbox name.
-
-For Docker MCP + AI Governance audit evidence:
-
-```bash
-make mcp-register-dhi
-make interview-demo-mcp
-```
-
-For a zero-mutation orchestration check:
-
-```bash
-make interview-demo-dry-run
-```
-
-Dry-run mode is required to leave positive response, quarantine, incident, and revocation claims false. CI tests that contract.
+There is deliberately **no marketing security score**.
 
 ---
 
-## Post-run assurance
+## Why this exists
 
-After an assessment or interview flow:
+An enterprise adopting coding agents needs stronger answers than:
 
-```bash
-make assurance-latest
+- “the agent runs in a sandbox”;
+- “we have an MCP policy”;
+- “audit logs exist”;
+- “the stop command succeeded”;
+- “the artifact is signed”.
+
+Those statements describe product presence or intent. They do not necessarily prove isolation, enforcement, attribution, containment, completeness or signer identity.
+
+Agent Baseline Evidence Lab converts those claims into a repeatable evidence lifecycle:
+
+```mermaid
+flowchart LR
+    A[Real coding task] --> B[Unique Docker Sandbox]
+    B --> C[Agent Baseline assessment]
+    C --> D[Verifiable evidence bundle]
+    D --> E[Response + assurance]
+    E --> F[Portable signed handoff]
+    D --> G[Governance Delta]
+    G --> H[Controlled Experiment Protocol]
 ```
 
-The assurance suite is read-only. It discovers the latest local evidence and evaluates:
-
-```text
-assessment bundle integrity
-        │
-        ├── adversarial evidence-verifier regression matrix
-        ├── credential-sensitive workspace co-change detection
-        ├── behavioral drift against a retained baseline
-        ├── Ed25519 attestation signature
-        ├── external signing-key anchor, when present
-        ├── incident-bundle digest verification
-        └── quarantine-registry integrity
-```
-
-The result is written to:
-
-```text
-reports/assurance-summary.json
-```
-
-Its result semantics are deliberately different from the control assessment:
-
-- `PASS` — executed verification succeeded;
-- `FAIL` — a blocking integrity/authenticity verifier failed;
-- `FINDING` — a non-blocking risk signal requires investigation;
-- `NOT_RUN` — optional evidence was not available.
-
-A behavioral change is therefore not mislabeled as a framework failure, while a corrupted bundle or invalid signature is blocking.
+The design goal is simple: **prove what can be proven, and make everything else visible.**
 
 ---
 
-## Why this is different
+## What the project demonstrates
 
-The lab refuses shortcuts such as:
+A customer PoC can use this repository to:
 
-- `Docker Sandbox installed → CON-03 PASS`
-- `MCP Gateway present → authorization solved`
-- `audit logs exist → end-to-end attribution proven`
-- `policy file exists → enforcement proven`
-- `sbx stop returned 0 → containment proven`
-- `credential binding removed → upstream provider token revoked`
-- `signature verifies → signer identity is trusted`
-- `hash chain verifies → source telemetry was complete`
+1. **Run a real coding task** inside a uniquely identified Docker Sandbox.
+2. **Observe selected boundaries** through Docker `sbx` inventory, filesystem canaries and network-policy decisions.
+3. **Assess 35 draft Agent Baseline controls** without converting missing evidence into `PASS`.
+4. **Analyze MCP governance posture** through Cedar-policy checks and optional Docker AI Governance audit metadata.
+5. **Validate the agent-modified workspace**, not a separate static fixture.
+6. **Preserve evidence integrity** with per-file SHA-256 manifests and a hash-chained normalized trace.
+7. **Produce run attestations** and optionally authenticate them with Ed25519 signatures.
+8. **Exercise response semantics** with a disposable sandbox-scoped credential binding and verified postconditions.
+9. **Create private-key-free customer handoffs** that can be verified offline.
+10. **Compare two verified runs** control-by-control without inventing a security score.
+11. **Fail closed on causal interpretation** when a before/after pair is not sufficiently controlled.
+
+### Evidence statuses
 
 Every Agent Baseline control is one of:
 
 `PASS` · `FAIL` · `PARTIAL` · `MANUAL` · `N/A` · `ERROR`
 
-A skipped live test is **never** counted as a pass.
+A skipped live probe is never counted as a pass.
 
-The project distinguishes four evidence classes:
+### Evidence classes
 
-1. **declared evidence** — configuration and design intent;
-2. **observed evidence** — runtime state, policy decisions, audit events and postconditions;
-3. **linked evidence** — artifacts correlated by stable identifiers or cryptographic digests;
-4. **externally anchored evidence** — evidence authenticated against material outside the artifact being verified.
+The project separates:
 
----
-
-## Current vertical slice
-
-### Discover
-
-- validates agent identity, ownership, risk context, status and component inventory;
-- records declared composition and effective-access intent;
-- inventories Docker MCP registrations when available;
-- matches expected MCP registration name and endpoint identity;
-- keeps runtime-vs-declared reconciliation incomplete until observed inventory exists.
-
-### Constrain
-
-- detects a known toxic-capability combination;
-- probes Docker Sandbox presence and active network/filesystem policy state;
-- performs a disposable host-canary separation check with `sbx exec`;
-- evaluates required allow/deny decisions with `sbx policy check network`;
-- provides a direct-MCP bypass probe so gateway governance and sandbox egress are not conflated;
-- records bounded capability-profile evidence without inferring assignment from generic policy presence.
-
-### Authorize
-
-- statically analyzes Docker MCP Cedar policy posture;
-- detects broad actionless permits, registration identity binding, tool/resource/prompt scope, approval guards and local-stdio forbids;
-- distinguishes `invokePrimordial` permit from forbid posture;
-- observes OAuth authorization metadata without storing token material;
-- ingests Docker AI Governance audit events for observed action attribution when available;
-- analyzes bounded evaluation → approval/deny → execution chains;
-- keeps JIT credentials, delegation attenuation, step-up and proof-of-possession manual until direct evidence exists.
-
-### Observe
-
-- creates an append-only SHA-256 hash-chained normalized trace;
-- joins finalized Docker AI Governance metadata events when configured;
-- recognizes observed `tool_invocation` / `tool_execution` as MCP activity rather than inferring tool use from configuration;
-- pseudonymizes username, email, organization and hostname before persistence;
-- preserves Docker audit event/session correlation keys;
-- supports behavioral drift baselines for destinations, tool use and event classes;
-- detects credential-sensitive/code co-change from changed paths without reading secret contents;
-- writes a per-file SHA-256 evidence manifest;
-- emits an in-toto-style run attestation;
-- supports external hash pins and Ed25519 signatures.
-
-### Validate
-
-- executes adversarial scenarios rather than storing only a scenario plan;
-- includes live host-canary and network-policy decision scenarios;
-- includes an offline MCP policy contract scenario;
-- executes tests against the **agent-modified disposable workspace**;
-- validates the sample Dockerfile security contract;
-- includes negative provenance tests where intentional evidence mutation must break verification;
-- includes a verifier attack matrix for single-file mutation, trace truncation, coordinated rewrite, and never-emitted source events.
-
-### Respond
-
-- keeps response mutation outside normal assessment execution;
-- verifies the named sandbox reached a stopped state rather than trusting command success alone;
-- can create and revoke a unique **sandbox-scoped disposable custom-secret binding** without using a real provider credential;
-- explicitly distinguishes local credential-binding removal from upstream provider token/session revocation;
-- provides a fail-closed provider-revocation adapter path, dry-run by default;
-- links response evidence to the original immutable assessment bundle by SHA-256;
-- records quarantine decisions in an append-only registry;
-- builds digest-only incident manifests from assessment, response, correlation and quarantine evidence;
-- provides a tested non-agent fallback validation workflow.
+| Class | Meaning |
+|---|---|
+| **Declared** | configuration and design intent |
+| **Observed** | runtime state, policy decisions and postconditions actually collected |
+| **Linked** | artifacts correlated by stable identifiers or cryptographic digests |
+| **Externally anchored** | evidence authenticated against material outside the artifact being verified |
 
 ---
 
-## Evidence architecture
+## 60-second safe tour
+
+Clone the repository and run the non-mutating path:
+
+```bash
+git clone https://github.com/riccardomenegazzo/agent-baseline-evidence-lab.git
+cd agent-baseline-evidence-lab
+make install
+make golden-demo-dry-run
+```
+
+Dry-run mode is intentionally fail-closed. It must not claim live containment, credential revocation, runtime enforcement or audit evidence that was never observed. CI tests that contract.
+
+For the non-technical project summary, start with [`docs/EXECUTIVE_OVERVIEW.md`](docs/EXECUTIVE_OVERVIEW.md).
+
+For the concise walkthrough, use [`docs/DEMO_GUIDE.md`](docs/DEMO_GUIDE.md).
+
+---
+
+## Live customer flow
+
+A live run requires a suitable Docker environment and the relevant Docker Sandboxes authentication/configuration.
+
+Before a customer-facing run, synchronize and verify the upstream draft baseline and establish the local signing key:
+
+```bash
+make baseline-sync
+make signing-keygen
+make baseline-lock-verify
+make baseline-lock-sign
+make baseline-lock-verify-signature
+```
+
+Then run the complete lifecycle:
+
+```bash
+make golden-demo
+```
+
+The live flow is evidence-first:
 
 ```text
-                         Agent Baseline v1.0-draft
-                                  │
-                                  ▼
-                         ┌───────────────────┐
- declared state ────────►│  Evidence Engine  │◄──────── Docker `sbx`
-                         └─────────┬─────────┘
-                                   │
-             ┌─────────────────────┼─────────────────────┐
-             │                     │                     │
-             ▼                     ▼                     ▼
-      Cedar policy            Scenario runner       Docker AI Governance
-      static analysis         safe/live probes      local audit JSONL
-             │                     │                     │
-             └─────────────────────┼─────────────────────┘
-                                   ▼
-                         normalized run trace
-                         SHA-256 hash chain
-                                   │
-                                   ▼
-                         assessment evidence
-                         SHA-256 file manifest
-                                   │
-              ┌────────────────────┼────────────────────┐
-              ▼                    ▼                    ▼
-         JSON report          HTML report       run attestation
-                                                     │
-                                      optional Ed25519 signature
-                                                     │
-                                   ┌─────────────────┴──────────────┐
-                                   ▼                                ▼
-                           response-link                    external key anchor
-                                   ▲
-                                   │
-                         response drill evidence
-                                   │
-                          quarantine + incident bundle
+readiness
+   ↓
+real coding task in a unique Docker Sandbox
+   ↓
+Agent Baseline assessment
+   ├─ live sandbox boundary probes
+   ├─ bounded adversarial scenarios
+   ├─ artifact validation
+   ├─ MCP policy evidence
+   └─ optional Docker AI Governance evidence
+   ↓
+immutable evidence bundle
+   ↓
+disposable response exercise
+   ↓
+attestation + assurance
+   ↓
+portable customer evidence pack
 ```
 
-See:
-
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- [`docs/DOCKER_EVIDENCE_SOURCES.md`](docs/DOCKER_EVIDENCE_SOURCES.md)
-- [`docs/RUN_ATTESTATION.md`](docs/RUN_ATTESTATION.md)
-- [`docs/RESPONSE_DRILL.md`](docs/RESPONSE_DRILL.md)
-- [`docs/INTERVIEW_DEMO.md`](docs/INTERVIEW_DEMO.md)
-- [`docs/ROADMAP.md`](docs/ROADMAP.md)
+The response path uses the **actual sandbox identity from the run**. It does not substitute a fixed demo name.
 
 ---
 
-## Quick start
-
-```bash
-make install
-make preflight
-make demo
-make verify
-make assurance-latest
-```
-
-The offline path remains intentionally useful. Without `sbx`, live scenarios become `SKIP`/`MANUAL`; policy-contract and artifact checks still execute.
-
-A real Codex-in-Sandbox run:
-
-```bash
-make live-demo
-```
-
-The live capsule stores prompt/output digests instead of raw content by default, captures workspace hashes before and after execution, Docker Sandbox observations and the agent task result, then evaluates the files the agent actually modified.
-
----
-
-## MCP assurance path
+## Optional Docker MCP / AI Governance path
 
 Register Docker's public DHI MCP endpoint:
 
@@ -301,158 +159,127 @@ Register Docker's public DHI MCP endpoint:
 make mcp-register-dhi
 ```
 
-Observe and validate the registration identity:
+Observe the registration and OAuth metadata without persisting token material:
 
 ```bash
 make mcp-inventory-dhi
-```
-
-Observe OAuth state without storing token material:
-
-```bash
 make mcp-oauth-status
 ```
 
-With a live sandbox, test whether direct sandbox egress can bypass the host-side MCP path:
+With a live sandbox, probe whether direct network egress could bypass the intended host-side MCP path:
 
 ```bash
 make mcp-bypass-dhi SANDBOX=<sandbox-name>
 ```
 
-Run the MCP live path:
+Run the MCP-focused live path:
 
 ```bash
 make live-demo-mcp
 ```
 
-The MCP configuration uses `policies/mcp/dhi-readonly.cedar` as reference policy evidence. Static policy analysis is never promoted to runtime enforcement evidence unless the relevant runtime decision is actually observed.
-
-When Docker AI Governance audit records are available, `tool_invocation` and `tool_execution` events are normalized as observed MCP activity, while source-level Docker audit events remain preserved through their available correlation identifiers.
-
-See [`docs/LIVE_AGENT_RUN.md`](docs/LIVE_AGENT_RUN.md).
+The repository treats static policy analysis as **policy evidence**, not proof of runtime enforcement. Optional Docker AI Governance audit records are promoted to observed activity only when the relevant finalized events are actually available.
 
 ---
 
-## Response evidence
+## Independent verification
 
-Basic containment drill:
-
-```bash
-make response-drill
-```
-
-Stronger disposable credential-binding exercise:
+After an assessment:
 
 ```bash
-make response-drill-full
+make verify
+make assurance-latest
 ```
 
-It uses generated random test material, not a real OpenAI, GitHub, or cloud credential.
+`abl verify` checks that:
 
-Verify the response artifact:
+1. every manifested evidence file still matches its SHA-256 digest;
+2. each normalized trace event links to the previous event hash;
+3. the final trace hash and event count match the anchors in the assessment.
 
-```bash
-python3 -m agent_baseline_lab.response_verify \
-  .abl/response/abl-demo-stop.json \
-  --sandbox abl-demo \
-  --require-revocation
-```
+The assurance suite adds integrity/authenticity regression checks, signature verification, drift signals and response/incident evidence when available.
 
-Link it to the latest verified assessment:
+Its semantics are intentionally separate from the control assessment:
 
-```bash
-make response-link
-make response-link-verify
-```
+- `PASS` — executed verification succeeded;
+- `FAIL` — a blocking integrity/authenticity check failed;
+- `FINDING` — a non-blocking risk signal requires review;
+- `NOT_RUN` — optional evidence was unavailable.
 
-The link binds:
-
-```text
-assessment manifest SHA-256
-response evidence SHA-256
-assessment run ID
-assessment trace head
-sandbox identity
-response claims
-```
-
-For explicit provider-revocation preview without mutation:
-
-```bash
-make provider-revocation-dry
-```
+A behavioral change is therefore not mislabeled as a framework failure.
 
 ---
 
-## Signing and trust anchors
+## Before / after governance evidence
 
-Generate a local Ed25519 keypair:
+### Governance Delta — what changed?
 
-```bash
-make signing-keygen
-```
-
-The private key is created below `.abl/`, which is ignored by Git.
-
-Sign and verify the latest run attestation:
+Given two verified evidence bundles:
 
 ```bash
-make sign-latest
-make verify-signature-latest
+make governance-delta \
+  BEFORE=evidence/abl-<before> \
+  AFTER=evidence/abl-<after>
+
+make governance-delta-verify \
+  BEFORE=evidence/abl-<before> \
+  AFTER=evidence/abl-<after>
 ```
 
-The signature proves authenticity relative to possession of the corresponding private key. It does **not** prove the human or organization controlling the key unless the verifier trusts the public key through an external channel.
+The delta classifies control transitions such as control improvement/regression, evidence gain/loss, evaluator recovery/error, scope change and unchanged controls.
 
-The same key can sign a verified upstream baseline lock:
+It does **not** compute a security score.
+
+### Controlled Experiment Protocol — can we discuss causality?
+
+A status change alone is not evidence that a governance treatment caused the change.
 
 ```bash
-make baseline-sync
-make baseline-lock-verify
-make baseline-lock-sign
-make baseline-lock-verify-signature
+make experiment-protocol \
+  BEFORE=evidence/abl-<before> \
+  AFTER=evidence/abl-<after>
 ```
 
-The baseline lock verifier recalculates source digest, control IDs, control count, version/status and catalogue drift before a signature is considered meaningful.
+The protocol checks measured invariants including baseline version, agent identity, task identity/digest, initial workspace digest, agent runtime and Docker Sandbox runtime fingerprint, while separately fingerprinting the declared governance treatment.
+
+It returns:
+
+- `ELIGIBLE` — required measured invariants match and the treatment differs;
+- `NOT_ELIGIBLE` — a required invariant differs, or no treatment change occurred;
+- `INSUFFICIENT_EVIDENCE` — a required invariant cannot be established.
+
+`ELIGIBLE` is not proof of causality; it is only the prerequisite boundary for a bounded causal interpretation.
+
+See [`docs/CONTROLLED_EXPERIMENT.md`](docs/CONTROLLED_EXPERIMENT.md).
 
 ---
 
-## Behavioral drift and unintended-action signals
+## Portable customer handoff
 
-Create a retained baseline from the latest assessment trace:
-
-```bash
-make drift-baseline
-```
-
-Compare a later run:
+Create a portable single-run evidence package:
 
 ```bash
-make drift-compare
+make customer-pack
+make customer-pack-verify
 ```
 
-Analyze the latest agent workspace delta for credential-sensitive/code co-change:
+For a before/after handoff:
 
 ```bash
-make unintended-latest
+make comparison-pack \
+  BEFORE=evidence/abl-<before> \
+  AFTER=evidence/abl-<after>
+
+make comparison-pack-verify
 ```
 
-Neither signal reads secret file contents.
+The comparison pack contains independently verifiable before/after customer evidence, the governance delta, signature material and the public verification key. Local private signing keys are explicitly excluded.
+
+The pack also minimizes host-local project/home path prefixes before export.
 
 ---
 
-## Non-agent fallback
-
-Demonstrate that validation can continue with the AI agent disabled:
-
-```bash
-make fallback-demo
-```
-
-The resulting artifact records reviewer identity, reason, validation commands, return codes and the explicit claims boundary. It proves the declared non-agent validation path executed; it does not pretend to prove a human reviewed every changed line.
-
----
-
-## Evidence output
+## What gets produced
 
 ```text
 agent-runs/
@@ -473,108 +300,72 @@ evidence/
     ├── assessment.json
     └── manifest.sha256.json
 
-.abl/
-├── keys/
-├── response/
-├── quarantine/
-└── baselines/
-
 reports/
 ├── abl-<timestamp>.json
 ├── abl-<timestamp>.html
 ├── abl-<timestamp>.attestation.json
-├── abl-<timestamp>.attestation.json.ed25519.json
-├── abl-<timestamp>.response-link.json
-├── abl-<timestamp>.incident.json
-├── abl-<timestamp>.interview-demo.json
-└── assurance-summary.json
+├── assurance-summary.json
+├── governance-delta.json
+├── governance-delta.html
+├── controlled-experiment.json
+├── controlled-experiment.html
+├── customer-evidence-pack.zip
+└── governance-comparison-pack.zip
 ```
+
+Raw prompts and raw agent output are not persisted by default. The live-run capsule stores digests and bounded metadata unless explicit output capture is requested.
 
 ---
 
-## Tamper evidence, authenticity, and completeness
+## Claims the project deliberately refuses
 
-`abl verify` checks:
+The lab does **not** assume that:
 
-1. every file recorded by `manifest.sha256.json` still matches its digest;
-2. every trace event links to the hash of the previous event;
-3. final trace hash and event count match anchors in `assessment.json`.
+- `Docker Sandbox installed → isolation control solved`;
+- `MCP Gateway present → authorization solved`;
+- `policy file exists → enforcement proven`;
+- `audit logs exist → end-to-end attribution proven`;
+- `sbx stop returned 0 → containment proven`;
+- `credential binding removed → upstream provider token revoked`;
+- `signature verifies → signer identity is trusted`;
+- `hash chain verifies → source telemetry was complete`;
+- `before/after improved → governance treatment caused the improvement`.
 
-For an external hash boundary:
-
-```bash
-abl verify evidence/abl-... \
-  --expected-manifest-sha256 <sha256> \
-  --expected-trace-head <sha256>
-```
-
-Verify the run attestation subject binding:
-
-```bash
-abl verify-attestation \
-  reports/abl-....attestation.json \
-  evidence/abl-.../manifest.sha256.json
-```
-
-The project calls these structures **tamper-evident**, not tamper-proof.
-
-The adversarial verification matrix intentionally demonstrates a deeper limit: a coordinated producer-side rewrite can remain internally self-consistent unless an external anchor exists, and no exported artifact can prove the existence of a source event that never entered the evidence pipeline.
+These distinctions are documented in [`docs/CLAIMS_BOUNDARY.md`](docs/CLAIMS_BOUNDARY.md).
 
 ---
 
-## Docker AI Governance audit ingestion
+## Download a release
 
-Enable optional local audit ingestion in an assessment config:
+The recommended distribution channel is [GitHub Releases](https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/releases/latest).
 
-```yaml
-assessment:
-  docker_audit:
-    enabled: true
-    path: ~/Library/Logs/com.docker.sandboxes/sandboxes/auditkit/
-    audit_session_id: <docker-audit-session-id>
-    agent: codex
-```
+Each automated release publishes:
 
-Preview records without adding them to an assessment:
+- an installable Python wheel;
+- a source distribution;
+- `SHA256SUMS`;
+- `release-manifest.json` binding artifact digests to the source commit.
 
-```bash
-abl audit-summary --agent codex
-```
-
-In-progress `.tmp` records are not treated as finalized evidence. Zero selected finalized events is never interpreted as proof that no governed action occurred.
+See [`DOWNLOAD.md`](DOWNLOAD.md) for installation and verification instructions.
 
 ---
 
-## Baseline drift
+## Documentation map
 
-The Agent Baseline remains a draft. Before a customer-facing run:
+Start here depending on the audience:
 
-```bash
-make baseline-sync
-make baseline-lock-verify
-```
-
-The project fetches and hashes the authoritative upstream controls file, compares permanent control IDs and reports drift. Requirement prose remains upstream rather than being silently forked into this repository.
-
----
-
-## Evidence schema evolution
-
-Response and interview-summary artifacts use explicit schema versions. Migration support is fail-closed:
-
-- future unknown schema versions are rejected;
-- legacy artifacts may be migrated only through known transitions;
-- migrations initialize newly introduced positive claims to `false`/empty rather than inferring them.
-
-This prevents a format upgrade from manufacturing security evidence.
-
----
-
-## Customer PoC
-
-[`docs/CUSTOMER_POC.md`](docs/CUSTOMER_POC.md) turns the repository into a reusable customer exercise with scenario, success criteria, evidence expectations, demo flow and explicit claims boundaries.
-
-For the technical-manager walkthrough, use [`docs/INTERVIEW_DEMO.md`](docs/INTERVIEW_DEMO.md).
+- **Executive / recruiting / leadership:** [`docs/EXECUTIVE_OVERVIEW.md`](docs/EXECUTIVE_OVERVIEW.md)
+- **Customer PoC:** [`docs/CUSTOMER_POC.md`](docs/CUSTOMER_POC.md)
+- **Demo walkthrough:** [`docs/DEMO_GUIDE.md`](docs/DEMO_GUIDE.md)
+- **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- **Control coverage:** [`docs/CONTROL_COVERAGE.md`](docs/CONTROL_COVERAGE.md)
+- **Evidence model:** [`docs/EVIDENCE_MODEL.md`](docs/EVIDENCE_MODEL.md)
+- **Docker evidence sources:** [`docs/DOCKER_EVIDENCE_SOURCES.md`](docs/DOCKER_EVIDENCE_SOURCES.md)
+- **Governance Delta:** [`docs/GOVERNANCE_DELTA.md`](docs/GOVERNANCE_DELTA.md)
+- **Controlled Experiment Protocol:** [`docs/CONTROLLED_EXPERIMENT.md`](docs/CONTROLLED_EXPERIMENT.md)
+- **Response evidence:** [`docs/RESPONSE_DRILL.md`](docs/RESPONSE_DRILL.md)
+- **Claims boundary:** [`docs/CLAIMS_BOUNDARY.md`](docs/CLAIMS_BOUNDARY.md)
+- **Roadmap:** [`docs/ROADMAP.md`](docs/ROADMAP.md)
 
 ---
 
@@ -584,64 +375,38 @@ For the technical-manager walkthrough, use [`docs/INTERVIEW_DEMO.md`](docs/INTER
 make install
 make test
 make lint
-make interview-demo-dry-run
-make assurance-latest
+make golden-demo-dry-run
 ```
 
-CI validates, among other things:
+CI exercises the package build and CLI entrypoints, framework tests, sample application tests, offline assessment, evidence verification, adversarial verifier regression, response fail-closed semantics, run-attestation binding, Ed25519 signing, Governance Delta, offline comparison handoff, privacy boundaries, assurance and the complete dry-run Golden Flow.
 
-- Ruff quality gate;
-- framework unit tests;
-- sample-app tests;
-- metadata-only live-run capsule;
-- response-drill non-mutation contract;
-- provider-revocation fail-closed dry run;
-- non-agent fallback execution;
-- full interview orchestration in dry-run mode;
-- explicit anti-false-claim assertions;
-- offline Agent Baseline assessment;
-- evidence bundle integrity;
-- adversarial verifier matrix;
-- run-attestation subject binding;
-- Ed25519 signing and verification with an external CI public key;
-- consolidated post-run assurance with no blocking failures.
+The release workflow only publishes a new version after the main CI succeeds, builds wheel + source distribution, generates SHA-256 release metadata and smoke-tests the wheel in a clean virtual environment.
 
 ---
 
-## Project status — v0.7.0
+## Project status
 
-The repository is an implementation and assurance lab, not a finished enterprise governance product.
+The repository is an **implementation and assurance lab**, not a finished enterprise governance product.
 
-Implemented and testable now:
+The current vertical slice includes:
 
-- portable Ed25519 signing;
-- baseline-source lock verification and signing;
-- MCP registration identity matching;
-- OAuth metadata redaction;
-- direct-MCP bypass probing;
-- bounded MCP governance action-chain analysis;
-- drift and unintended-action detection;
-- sandbox stop + disposable binding revocation evidence;
-- provider-revocation adapter boundary;
-- quarantine registry;
-- digest-only incident bundle;
-- non-agent fallback;
-- schema migrations that cannot invent positive claims;
-- consolidated post-run assurance.
+- all 35 Agent Baseline draft controls with explicit evidence semantics;
+- Docker Sandbox runtime probes and bounded adversarial scenarios;
+- MCP policy analysis and optional Docker AI Governance audit ingestion;
+- privacy-minimized evidence and trace generation;
+- run attestations and Ed25519 signing;
+- response, quarantine and incident evidence;
+- portable customer evidence packs;
+- Governance Delta before/after comparison;
+- Controlled Experiment Protocol;
+- automated downloadable releases.
 
-Still dependent on a suitable live Docker environment:
+Remaining work is intentionally focused on stronger **live** evidence where the surrounding Docker/provider environment exposes trustworthy postconditions — not on manufacturing green results for unavailable signals.
 
-1. collect a real Docker AI Governance MCP `tool_invocation` + `tool_execution` pair from the DHI live flow;
-2. obtain stronger run-to-audit correlation where the available Docker event model supports it;
-3. observe a real evaluation → approval/deny → execution chain;
-4. execute the direct-MCP bypass probe against the locally installed `sbx` release;
-5. verify provider-side token/session invalidation only where a provider exposes a trustworthy postcondition;
-6. add a genuinely interoperable transparency-log publication path rather than a cosmetic Rekor claim.
-
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`docs/UPSTREAM_FEEDBACK.md`](docs/UPSTREAM_FEEDBACK.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ---
 
 ## License
 
-Apache-2.0 for this repository's code. Agent Baseline materials remain under their upstream licenses and ownership; authoritative control requirements are not vendored here.
+Apache-2.0 for this repository's code. Agent Baseline materials remain under their upstream licenses and ownership; authoritative control requirement prose is not silently vendored here.
