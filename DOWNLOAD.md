@@ -1,52 +1,52 @@
 # Download Agent Baseline Evidence Lab
 
-The recommended distribution channel is **GitHub Releases**.
-
-## Latest release
-
-Open:
+The recommended distribution channel is **GitHub Releases**:
 
 https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/releases/latest
 
-Current release, v0.10.0:
-
-https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/releases/tag/v0.10.0
-
 ## Which file should I download?
 
-For normal installation, download the Python wheel:
+For normal installation, download the Python wheel whose version matches the release:
 
 ```text
-agent_baseline_evidence_lab-0.10.0-py3-none-any.whl
+agent_baseline_evidence_lab-<version>-py3-none-any.whl
 ```
 
-The release also contains:
+Each automated release also contains:
 
 ```text
-agent_baseline_evidence_lab-0.10.0.tar.gz
+agent_baseline_evidence_lab-<version>.tar.gz
 SHA256SUMS
 release-manifest.json
 ```
 
 - `.whl` — recommended installable package;
 - `.tar.gz` — source distribution;
-- `SHA256SUMS` — integrity checksums;
-- `release-manifest.json` — source commit, version, artifact sizes and SHA-256 digests.
+- `SHA256SUMS` — integrity checksums for the published artifacts;
+- `release-manifest.json` — release version, source commit, artifact sizes and SHA-256 digests.
 
-GitHub additionally exposes standard source-code `.zip` and `.tar.gz` archives for the release tag.
+GitHub additionally exposes the standard source-code archives for the release tag.
 
 ## Install the wheel
+
+After downloading the wheel:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install ./agent_baseline_evidence_lab-0.10.0-py3-none-any.whl
+pip install ./agent_baseline_evidence_lab-<version>-py3-none-any.whl
 abl --help
+```
+
+On Windows PowerShell, activate the environment with:
+
+```powershell
+.venv\Scripts\Activate.ps1
 ```
 
 ## Verify the downloaded artifacts
 
-Download `SHA256SUMS` into the same directory as the wheel/source archive.
+Download `SHA256SUMS` into the same directory as the wheel and source archive.
 
 ### macOS
 
@@ -60,19 +60,28 @@ shasum -a 256 -c SHA256SUMS
 sha256sum -c SHA256SUMS
 ```
 
-You can also inspect `release-manifest.json` to confirm which Git commit produced the artifacts.
+You can also inspect `release-manifest.json` to confirm which exact Git commit produced the package artifacts.
 
-## Release lifecycle
+## What the release pipeline verifies
 
-A new release is published only after the `ci` workflow succeeds on `main` and the version in `pyproject.toml` has not already been published.
+A release is published only after the main `ci` workflow succeeds. The release workflow then:
 
-Published release assets are treated as immutable: the release workflow detects an existing tag/version and will not replace its artifacts.
+1. checks that the requested release version matches `pyproject.toml`;
+2. refuses to overwrite an already-published version;
+3. builds a wheel and source distribution;
+4. records SHA-256 digests and source commit in `release-manifest.json`;
+5. generates `SHA256SUMS`;
+6. installs the wheel into a clean virtual environment;
+7. smoke-tests the installed CLI;
+8. publishes the GitHub Release assets.
 
-To prepare the next version:
+Existing release assets are treated as immutable by the publisher.
+
+## Preparing a future release
 
 1. bump `[project].version` in `pyproject.toml`;
 2. add `docs/releases/vX.Y.Z.md`;
-3. merge/push the change to `main`;
-4. after CI passes, GitHub Actions builds, smoke-tests and publishes the release automatically.
+3. push the change to `main`;
+4. after CI passes, GitHub Actions builds, verifies and publishes the release automatically.
 
-The release workflow can also be invoked manually or from a `v*` tag when needed.
+The workflow can also be invoked manually or from a `v*` tag when needed.
