@@ -1,11 +1,16 @@
 .PHONY: install test lint preflight baseline-sync assess demo verify evidence-matrix audit-summary \
-	live-dry-run live-demo live-demo-mcp mcp-register-dhi sandbox-create sandbox-run sandbox-shell sandbox-rm \
+	live-dry-run live-demo live-demo-mcp mcp-register-dhi mcp-inventory-dhi mcp-bypass-dhi \
+	sandbox-create sandbox-run sandbox-shell sandbox-rm \
 	response-drill response-drill-full response-drill-dry-run response-link response-link-verify \
-	interview-demo interview-demo-mcp interview-demo-dry-run audit-correlate-latest audit-correlate-exact
+	interview-demo interview-demo-mcp interview-demo-dry-run audit-correlate-latest audit-correlate-exact \
+	signing-keygen sign-latest verify-signature-latest drift-baseline drift-compare unintended-latest \
+	fallback-demo quarantine-latest incident-bundle-latest provider-revocation-dry
 
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
 ABL := $(VENV)/bin/abl
+SANDBOX ?= abl-demo
+MCP_HOST ?= dhi.io
 
 install:
 	python3 -m venv $(VENV)
@@ -35,77 +40,151 @@ verify:
 	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
 	$(ABL) verify "$$latest"
 
-# Reproducibly attack disposable copies of the latest verified bundle. Demonstrates
-# integrity, truncation, coordinated-rewrite and never-emitted-event boundaries.
+# Reproducibly attack disposable copies of the latest verified bundle.
 evidence-matrix:
 	@latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
 	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
 	$(PYTHON) -m agent_baseline_lab.evidence_matrix "$$latest" \
 		--output reports/evidence-verification-matrix.json
 
+# Generate a local Ed25519 keypair. Keep the private key outside version control.
+signing-keygen:
+	$(PYTHON) -m agent_baseline_lab.signing keygen \
+		--private .abl/keys/attestation-private.json \
+		--public .abl/keys/attestation-public.json
+
+# Sign the latest run attestation. Requires `make signing-keygen` first.
+sign-latest:
+	@latest=$$(ls -1t reports/abl-*.attestation.json 2>/dev/null | head -1); \
+	if [ -z "$$latest" ]; then echo "No run attestation found"; exit 1; fi; \
+	$(PYTHON) -m agent_baseline_lab.signing sign "$$latest" \
+		--private .abl/keys/attestation-private.json \
+		--output "$${latest}.ed25519.json"
+
+verify-signature-latest:
+	@latest=$$(ls -1t reports/abl-*.attestation.json 2>/dev/null | head -1); \
+	if [ -z "$$latest" ]; then echo "No run attestation found"; exit 1; fi; \
+	$(PYTHON) -m agent_baseline_lab.signing verify "$$latest" \
+		"$${latest}.ed25519.json" --public .abl/keys/attestation-public.json
+
 audit-summary:
 	$(ABL) audit-summary
 
-# Re-analyze finalized Docker AI Governance audit JSONL for the latest live agent session.
-# Diagnostic mode reports exact/pending/ambiguous strength without failing on non-exact evidence.
 audit-correlate-latest:
 	@latest=$$(ls -1dt agent-runs/agent-* 2>/dev/null | head -1); \
 	if [ -z "$$latest" ]; then echo "No agent run found"; exit 1; fi; \
 	$(PYTHON) -m agent_baseline_lab.audit_correlation "$$latest/session.json"
 
-# Same analysis, but act as a gate: exit non-zero unless resource_id contains the run marker.
 audit-correlate-exact:
 	@latest=$$(ls -1dt agent-runs/agent-* 2>/dev/null | head -1); \
 	if [ -z "$$latest" ]; then echo "No agent run found"; exit 1; fi; \
 	$(PYTHON) -m agent_baseline_lab.audit_correlation "$$latest/session.json" --require-exact
 
+# Observe host-managed Docker MCP registrations and verify DHI identity.
+mcp-inventory-dhi:
+	$(PYTHON) -m agent_baseline_lab.mcp_inventory \
+		--expect dhi=https://dhi.io/mcp \
+		--output reports/mcp-inventory.json
+
+# Requires a live sandbox. PASS means direct sandbox egress to DHI is denied,
+# while the host-side MCP gateway remains a separate governed path.
+mcp-bypass-dhi:
+	$(PYTHON) -m agent_baseline_lab.mcp_bypass \
+		--sandbox "$(SANDBOX)" --host "$(MCP_HOST)" \
+		--output reports/mcp-bypass.json
+
+# Create a behavioral baseline from the latest assessment trace.
+drift-baseline:
+	@latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
+	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
+	$(PYTHON) -m agent_baseline_lab.drift create "$$latest/trace/events.ndjson" \
+		--output .abl/baselines/behavior.json
+
+# Compare the latest assessment against the retained behavioral baseline.
+drift-compare:
+	@latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
+	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
+	$(PYTHON) -m agent_baseline_lab.drift compare .abl/baselines/behavior.json \
+		"$$latest/trace/events.ndjson" --output reports/behavior-drift.json
+
+# Detect credential-sensitive path changes in the latest agent workspace delta.
+unintended-latest:
+	@latest=$$(ls -1dt agent-runs/agent-* 2>/dev/null | head -1); \
+	if [ -z "$$latest" ]; then echo "No agent run found"; exit 1; fi; \
+	$(PYTHON) -m agent_baseline_lab.unintended_action \
+		"$$latest/workspace-changes.json" --output reports/unintended-action.json
+
+# Demonstrate the non-agent validation path on the sample application.
+fallback-demo:
+	$(PYTHON) -m agent_baseline_lab.fallback \
+		--workspace sample-app --reviewer demo-human-reviewer \
+		--reason "agent disabled for fallback exercise" \
+		--command python3 -m unittest discover -s tests -v \
+		--output reports/fallback.json
+
+# Register the latest response evidence as a quarantine decision for its sandbox.
+quarantine-latest:
+	@response=$$(ls -1t .abl/response/*.json 2>/dev/null | head -1); \
+	latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
+	if [ -z "$$response" ] || [ -z "$$latest" ]; then echo "Response/evidence missing"; exit 1; fi; \
+	run_id=$$(basename "$$latest"); \
+	sandbox=$$($(PYTHON) -c 'import json,sys; print(json.load(open(sys.argv[1]))["sandbox"])' "$$response"); \
+	$(PYTHON) -m agent_baseline_lab.quarantine add \
+		--component-type sandbox --component-id "$$sandbox" \
+		--reason "verified response containment" --run-id "$$run_id" \
+		--response-evidence "$$response"
+
+# Build a digest-only incident manifest from the latest assessment + response + quarantine registry.
+incident-bundle-latest:
+	@assessment=$$(ls -1t reports/abl-*.json 2>/dev/null | grep -v -E 'attestation|response-link|interview-demo' | head -1); \
+	response=$$(ls -1t .abl/response/*.json 2>/dev/null | head -1); \
+	latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
+	if [ -z "$$assessment" ] || [ -z "$$response" ] || [ -z "$$latest" ]; then echo "Required evidence missing"; exit 1; fi; \
+	run_id=$$(basename "$$latest"); \
+	$(PYTHON) -m agent_baseline_lab.incident_bundle create \
+		--output "reports/$${run_id}.incident.json" --run-id "$$run_id" \
+		--artifact "assessment=$$assessment" --artifact "response=$$response" \
+		--artifact "quarantine-registry=.abl/quarantine/registry.ndjson"
+
+# Explicitly non-mutating provider-adapter preview.
+provider-revocation-dry:
+	$(PYTHON) -m agent_baseline_lab.provider_revocation docker-mcp-oauth dhi \
+		--output reports/provider-revocation-dry.json
+
 # CI-safe proof that the live-run capsule is metadata-only and internally verifiable.
 live-dry-run:
 	$(ABL) live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess
 
-# Community path: real Codex task in a disposable Docker Sandbox workspace.
 live-demo:
 	$(ABL) live-run --config examples/agent.yaml --task examples/task.md --assess
 
-# Full MCP path. Register the public Docker Hardened Images MCP server once first.
 mcp-register-dhi:
 	sbx mcp add dhi --url https://dhi.io/mcp
 
 live-demo-mcp:
 	$(ABL) live-run --config examples/agent-mcp.yaml --task examples/task-mcp.md --assess --with-docker-audit
 
-# Manager-facing end-to-end flow. Uses the unique sandbox created by the agent run,
-# performs disposable credential-binding revocation + stop, links immutable evidence,
-# verifies the link, then removes only that unique disposable sandbox.
 interview-demo:
 	$(PYTHON) -m agent_baseline_lab.interview_demo \
 		--config examples/agent.yaml --task examples/task.md --cleanup
 
-# MCP + Docker AI Governance audit variant. Register DHI first with `make mcp-register-dhi`.
-# A run-scoped .invalid network marker is attempted to support empirical audit correlation.
 interview-demo-mcp:
 	$(PYTHON) -m agent_baseline_lab.interview_demo \
 		--config examples/agent-mcp.yaml --task examples/task-mcp.md \
 		--with-docker-audit --cleanup
 
-# Full orchestration contract with zero sbx mutation and no positive response link.
 interview-demo-dry-run:
 	$(PYTHON) -m agent_baseline_lab.interview_demo \
 		--config examples/agent.yaml --task examples/task.md --dry-run
 
-# Explicit containment exercise. This affects only the named abl-demo sandbox.
 response-drill:
 	$(PYTHON) -m agent_baseline_lab.response --sandbox abl-demo --output .abl/response/abl-demo-stop.json
 
-# Stronger response exercise: create a disposable sandbox-scoped custom credential binding,
-# verify it exists, revoke it, verify it is gone, then stop only abl-demo.
 response-drill-full:
 	$(PYTHON) -m agent_baseline_lab.response --sandbox abl-demo \
 		--output .abl/response/abl-demo-stop.json \
 		--test-disposable-secret-revocation
 
-# Link the latest verified assessment bundle to the verified response drill without
-# mutating either artifact. Requires the full credential-binding drill by default.
 response-link:
 	@latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
 	if [ -z "$$latest" ]; then echo "No assessment evidence run found"; exit 1; fi; \
@@ -123,11 +202,11 @@ response-link-verify:
 		"reports/$${run_id}.response-link.json" \
 		"$$latest" .abl/response/abl-demo-stop.json
 
-# CI-safe contract check: writes evidence but executes no sbx mutation.
 response-drill-dry-run:
-	$(PYTHON) -m agent_baseline_lab.response --sandbox abl-demo --output .abl/response/abl-demo-stop-dry-run.json --dry-run --test-disposable-secret-revocation
+	$(PYTHON) -m agent_baseline_lab.response --sandbox abl-demo \
+		--output .abl/response/abl-demo-stop-dry-run.json --dry-run \
+		--test-disposable-secret-revocation
 
-# Lower-level sandbox helpers retained for manual exploration.
 sandbox-create:
 	sbx create --name abl-demo --deny-network exfiltration.invalid codex "$(CURDIR)/sample-app"
 
