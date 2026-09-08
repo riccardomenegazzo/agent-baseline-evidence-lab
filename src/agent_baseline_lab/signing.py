@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -101,10 +102,8 @@ def generate_keypair(
     )
     if result.returncode != 0:
         raise RuntimeError(f"key generation failed: {result.stderr.strip()}")
-    try:
+    with contextlib.suppress(OSError):
         os.chmod(private, 0o600)
-    except OSError:
-        pass
     return private, public, public_key_fingerprint(public)
 
 
