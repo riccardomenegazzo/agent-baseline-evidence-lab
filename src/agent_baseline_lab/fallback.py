@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .commands import run
+from .privacy import portable_path
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ def run_fallback(
     reason: str,
     commands: list[list[str]],
     output_path: str | Path,
+    privacy_root: str | Path | None = None,
 ) -> FallbackResult:
     root = Path(workspace).resolve()
     if not root.is_dir():
@@ -69,6 +71,7 @@ def run_fallback(
     if not commands:
         raise ValueError("at least one fallback validation command is required")
 
+    evidence_root = Path(privacy_root).resolve() if privacy_root is not None else Path.cwd().resolve()
     started = _utc_now()
     results: list[FallbackCheck] = []
     for command in commands:
@@ -88,12 +91,13 @@ def run_fallback(
         completed_at=_utc_now(),
         reviewer=reviewer,
         reason=reason,
-        workspace=str(root),
+        workspace=portable_path(evidence_root, root),
         checks=results,
         fallback_verified=all(check.passed for check in results),
         agent_execution_required=False,
         claims_boundary=(
             "This proves the declared manual validation path executed without an AI agent. "
+            "The persisted workspace is an evidence-safe portable reference, not a host filesystem path. "
             "It does not prove the reviewer personally inspected every code change unless separate review evidence is supplied."
         ),
     )
@@ -125,6 +129,7 @@ def main(argv: list[str] | None = None) -> int:
             reason=args.reason,
             commands=commands,
             output_path=args.output,
+            privacy_root=Path.cwd(),
         )
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
