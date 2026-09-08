@@ -1,11 +1,11 @@
 .PHONY: install test lint preflight readiness readiness-mcp baseline-sync baseline-lock-verify baseline-lock-sign baseline-lock-verify-signature \
 	assess demo verify assurance-latest evidence-matrix governance-delta governance-delta-verify governance-delta-sign governance-delta-sign-verify \
-	customer-pack customer-pack-verify audit-summary live-dry-run live-demo live-demo-mcp mcp-register-dhi mcp-inventory-dhi mcp-bypass-dhi mcp-oauth-status \
-	sandbox-create sandbox-run sandbox-shell sandbox-rm response-drill response-drill-full response-drill-dry-run response-link response-link-verify \
-	interview-demo interview-demo-mcp interview-demo-dry-run golden-demo golden-demo-mcp golden-demo-dry-run \
-	audit-correlate-latest audit-correlate-exact signing-keygen sign-latest verify-signature-latest \
-	drift-baseline drift-compare unintended-latest fallback-demo quarantine-latest incident-bundle-latest \
-	provider-revocation-dry
+	comparison-pack comparison-pack-verify customer-pack customer-pack-verify audit-summary live-dry-run live-demo live-demo-mcp \
+	mcp-register-dhi mcp-inventory-dhi mcp-bypass-dhi mcp-oauth-status sandbox-create sandbox-run sandbox-shell sandbox-rm \
+	response-drill response-drill-full response-drill-dry-run response-link response-link-verify interview-demo interview-demo-mcp \
+	interview-demo-dry-run golden-demo golden-demo-mcp golden-demo-dry-run audit-correlate-latest audit-correlate-exact \
+	signing-keygen sign-latest verify-signature-latest drift-baseline drift-compare unintended-latest fallback-demo \
+	quarantine-latest incident-bundle-latest provider-revocation-dry
 
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
@@ -17,6 +17,7 @@ BASELINE_CACHE ?= .cache/agentbaseline
 CUSTOMER_PACK ?= reports/customer-evidence-pack.zip
 DELTA_JSON ?= reports/governance-delta.json
 DELTA_HTML ?= reports/governance-delta.html
+COMPARISON_PACK ?= reports/governance-comparison-pack.zip
 
 install:
 	python3 -m venv $(VENV)
@@ -101,6 +102,18 @@ governance-delta-sign: governance-delta
 governance-delta-sign-verify:
 	$(PYTHON) -m agent_baseline_lab.signing verify "$(DELTA_JSON)" \
 		"$(DELTA_JSON).ed25519.json" --public .abl/keys/attestation-public.json
+
+comparison-pack:
+	@if [ -z "$(BEFORE)" ] || [ -z "$(AFTER)" ]; then echo "Usage: make comparison-pack BEFORE=evidence/abl-before AFTER=evidence/abl-after"; exit 1; fi
+	$(PYTHON) -m agent_baseline_lab.comparison_pack create \
+		"$(BEFORE)" "$(AFTER)" --root . --output "$(COMPARISON_PACK)"
+
+comparison-pack-verify:
+	@if [ ! -f "$(COMPARISON_PACK)" ]; then echo "Comparison pack not found: $(COMPARISON_PACK)"; exit 1; fi
+	@if [ ! -f "$(COMPARISON_PACK).ed25519.json" ]; then echo "Comparison pack signature not found"; exit 1; fi
+	$(PYTHON) -m agent_baseline_lab.comparison_pack verify "$(COMPARISON_PACK)" \
+		--signature "$(COMPARISON_PACK).ed25519.json" \
+		--public .abl/keys/attestation-public.json
 
 customer-pack: assurance-latest
 	$(PYTHON) -m agent_baseline_lab.portable_pack create \
