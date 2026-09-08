@@ -23,9 +23,9 @@ release-manifest.json
 - `.whl` — recommended installable package;
 - `.tar.gz` — source distribution;
 - `SHA256SUMS` — integrity checksums for the published artifacts;
-- `release-manifest.json` — release version, source commit, artifact sizes and SHA-256 digests.
+- `release-manifest.json` — version, tag, source commit, artifact sizes, SHA-256 digests and release-provenance metadata.
 
-GitHub additionally exposes the standard source-code archives for the release tag.
+Starting with the first release after v0.10.2, GitHub Artifact Attestations also provide SLSA build provenance for the wheel, source distribution and release metadata.
 
 ## Install the wheel
 
@@ -36,7 +36,10 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install ./agent_baseline_evidence_lab-<version>-py3-none-any.whl
 abl --help
+abl-trust --help
 ```
+
+`abl` exposes the assessment-oriented CLI. `abl-trust` runs the complete customer trust lifecycle.
 
 On Windows PowerShell, activate the environment with:
 
@@ -46,42 +49,87 @@ On Windows PowerShell, activate the environment with:
 
 ## Verify the downloaded artifacts
 
-Download `SHA256SUMS` into the same directory as the wheel and source archive.
+For a high-assurance download, use both verification layers.
 
-### macOS
+### 1. Verify SHA-256 integrity
+
+Download `SHA256SUMS` into the same directory as the wheel, source archive and `release-manifest.json`.
+
+macOS:
 
 ```bash
 shasum -a 256 -c SHA256SUMS
 ```
 
-### Linux
+Linux:
 
 ```bash
 sha256sum -c SHA256SUMS
 ```
 
-You can also inspect `release-manifest.json` to confirm which exact Git commit produced the package artifacts.
+Then inspect `release-manifest.json` to confirm the exact Git commit associated with the package artifacts.
+
+### 2. Verify SLSA build provenance
+
+With GitHub CLI installed:
+
+```bash
+gh attestation verify \
+  agent_baseline_evidence_lab-<version>-py3-none-any.whl \
+  --repo riccardomenegazzo/agent-baseline-evidence-lab
+```
+
+You can run the same command for:
+
+```text
+agent_baseline_evidence_lab-<version>.tar.gz
+release-manifest.json
+SHA256SUMS
+```
+
+The release workflow performs this verification itself before publishing the release.
+
+See [`docs/RELEASE_PROVENANCE.md`](docs/RELEASE_PROVENANCE.md) for the exact trust and claims boundary.
 
 ## What the release pipeline verifies
 
 A release is published only after the main `ci` workflow succeeds. The release workflow then:
 
 1. checks that the requested release version matches `pyproject.toml`;
-2. refuses to overwrite an already-published version;
-3. builds a wheel and source distribution;
-4. records SHA-256 digests and source commit in `release-manifest.json`;
-5. generates `SHA256SUMS`;
-6. installs the wheel into a clean virtual environment;
-7. smoke-tests the installed CLI;
-8. publishes the GitHub Release assets.
+2. requires matching release notes under `docs/releases/`;
+3. refuses to overwrite an already-published version;
+4. builds a wheel and source distribution;
+5. records artifact size, SHA-256 and source commit in `release-manifest.json`;
+6. generates `SHA256SUMS`;
+7. installs the wheel into a clean virtual environment;
+8. smoke-tests `abl`, the Customer Trust Flow and key verification modules;
+9. creates GitHub/Sigstore-backed SLSA build provenance attestations for all four release files;
+10. runs `gh attestation verify` against every release file;
+11. publishes the immutable GitHub Release only if all preceding gates pass.
 
 Existing release assets are treated as immutable by the publisher.
 
+## What provenance does — and does not — mean
+
+A successful GitHub artifact-attestation verification supports a bounded provenance claim: the downloaded subject is linked to an attestation associated with the expected GitHub repository/workflow identity.
+
+It does **not** prove that:
+
+- the software is vulnerability-free;
+- every upstream dependency is safe;
+- the repository owner has a particular real-world identity;
+- the package is compliance-certified;
+- the artifact is appropriate for a specific production environment.
+
+The project treats provenance as evidence, not certification.
+
 ## Preparing a future release
 
-1. bump `[project].version` in `pyproject.toml`;
+1. complete and verify the implementation on `main`;
 2. add `docs/releases/vX.Y.Z.md`;
-3. push the change to `main`;
-4. after CI passes, GitHub Actions builds, verifies and publishes the release automatically.
+3. bump `[project].version` in `pyproject.toml` as the final content change;
+4. push to `main`;
+5. let the main CI gate the release workflow;
+6. verify the release artifact attestations and immutable assets.
 
-The workflow can also be invoked manually or from a `v*` tag when needed.
+The workflow can also be invoked manually or from a `v*` tag when needed, but the same version and release-note checks still apply.
