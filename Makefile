@@ -1,5 +1,5 @@
 .PHONY: install test lint preflight readiness readiness-mcp baseline-sync baseline-lock-verify baseline-lock-sign baseline-lock-verify-signature \
-	assess demo verify assurance-latest evidence-matrix audit-summary \
+	assess demo verify assurance-latest evidence-matrix customer-pack customer-pack-verify audit-summary \
 	live-dry-run live-demo live-demo-mcp mcp-register-dhi mcp-inventory-dhi mcp-bypass-dhi mcp-oauth-status \
 	sandbox-create sandbox-run sandbox-shell sandbox-rm \
 	response-drill response-drill-full response-drill-dry-run response-link response-link-verify \
@@ -14,6 +14,7 @@ SANDBOX ?= abl-demo
 MCP_HOST ?= dhi.io
 MCP_SERVER ?= dhi
 BASELINE_CACHE ?= .cache/agentbaseline
+CUSTOMER_PACK ?= reports/customer-evidence-pack.zip
 
 install:
 	python3 -m venv $(VENV)
@@ -78,6 +79,14 @@ evidence-matrix:
 	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
 	$(PYTHON) -m agent_baseline_lab.evidence_matrix "$$latest" \
 		--output reports/evidence-verification-matrix.json
+
+customer-pack: assurance-latest
+	$(PYTHON) -m agent_baseline_lab.portable_pack create \
+		--output "$(CUSTOMER_PACK)"
+
+customer-pack-verify:
+	@if [ ! -f "$(CUSTOMER_PACK)" ]; then echo "Customer evidence pack not found: $(CUSTOMER_PACK)"; exit 1; fi
+	$(PYTHON) -m agent_baseline_lab.portable_pack verify "$(CUSTOMER_PACK)"
 
 signing-keygen:
 	$(PYTHON) -m agent_baseline_lab.signing keygen \
@@ -187,11 +196,11 @@ mcp-register-dhi:
 live-demo-mcp:
 	$(ABL) live-run --config examples/agent-mcp.yaml --task examples/task-mcp.md --assess --with-docker-audit
 
-interview-demo:
+interview-demo: readiness
 	$(PYTHON) -m agent_baseline_lab.interview_demo \
 		--config examples/agent.yaml --task examples/task.md --cleanup
 
-interview-demo-mcp:
+interview-demo-mcp: readiness-mcp
 	$(PYTHON) -m agent_baseline_lab.interview_demo \
 		--config examples/agent-mcp.yaml --task examples/task-mcp.md \
 		--with-docker-audit --cleanup
