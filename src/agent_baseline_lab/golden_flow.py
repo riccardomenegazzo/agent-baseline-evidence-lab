@@ -23,6 +23,8 @@ class GoldenFlowSummary:
     dry_run: bool
     readiness_checked: bool
     readiness_ready: bool | None
+    baseline_signature_checked: bool
+    baseline_signature_verified: bool | None
     assessment_run_id: str
     assessment_bundle_verified: bool
     response_link_verified: bool
@@ -66,6 +68,13 @@ def _require_signing_keys(root: Path) -> tuple[Path, Path]:
     return private_key, public_key
 
 
+def _baseline_paths(root: Path, baseline_cache: str | Path) -> tuple[Path, Path]:
+    cache = Path(baseline_cache)
+    if not cache.is_absolute():
+        cache = root / cache
+    return cache / "baseline.lock.json", cache / "baseline.lock.ed25519.json"
+
+
 def run_golden_flow(
     root_path: str | Path = ".",
     *,
@@ -82,6 +91,8 @@ def run_golden_flow(
 
     readiness_checked = not dry_run
     readiness_ready: bool | None = None
+    baseline_signature_checked = not dry_run
+    baseline_signature_verified: bool | None = None
     if readiness_checked:
         readiness = run_readiness(root, profile=profile, baseline_cache=baseline_cache)
         readiness_ready = readiness.ready
@@ -98,6 +109,21 @@ def run_golden_flow(
                 if check.required and check.status != "PASS"
             ]
             raise ValueError("golden flow readiness failed: " + ", ".join(failures))
+
+        baseline_lock, baseline_signature = _baseline_paths(root, baseline_cache)
+        if not baseline_signature.is_file():
+            raise ValueError(
+                "golden flow requires a signed baseline lock; run `make baseline-lock-sign` first"
+            )
+        baseline_signature_verified, baseline_errors, _ = verify_signature(
+            baseline_lock,
+            baseline_signature,
+            public_key_path=public_key,
+        )
+        if not baseline_signature_verified:
+            raise ValueError(
+                "baseline lock signature verification failed: " + "; ".join(baseline_errors)
+            )
 
     config = root / "examples" / ("agent-mcp.yaml" if profile == "mcp" else "agent.yaml")
     task = root / "examples" / ("task-mcp.md" if profile == "mcp" else "task.md")
@@ -160,6 +186,8 @@ def run_golden_flow(
         dry_run=dry_run,
         readiness_checked=readiness_checked,
         readiness_ready=readiness_ready,
+        baseline_signature_checked=baseline_signature_checked,
+        baseline_signature_verified=baseline_signature_verified,
         assessment_run_id=run_id,
         assessment_bundle_verified=demo.assessment_bundle_verified,
         response_link_verified=demo.response_link_verified,
@@ -175,10 +203,11 @@ def run_golden_flow(
         customer_pack_signature_verified=pack_signature_ok,
         public_key=_portable(root, public_key),
         claims_boundary=(
-            "The golden flow proves only the checks actually executed for this run. A valid Ed25519 "
-            "signature proves possession of the configured local private key, not external organizational "
-            "identity. Dry-run mode intentionally skips Docker readiness and cannot claim live containment, "
-            "credential revocation, quarantine, incident response, or Docker AI Governance coverage."
+            "The golden flow proves only the checks actually executed for this run. The live path verifies "
+            "the signed baseline lock before execution. A valid Ed25519 signature proves possession of the "
+            "configured local private key, not external organizational identity. Dry-run mode intentionally "
+            "skips Docker readiness and baseline-signature gating and cannot claim live containment, credential "
+            "revocation, quarantine, incident response, or Docker AI Governance coverage."
         ),
     )
     summary_path = root / "reports" / f"{run_id}.golden-flow.json"
@@ -213,6 +242,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  assessment run:       {summary.assessment_run_id}")
     print(f"  readiness checked:    {summary.readiness_checked}")
     print(f"  readiness ready:      {summary.readiness_ready}")
+    print(f"  baseline signed:      {summary.baseline_signature_verified}")
     print(f"  bundle verified:      {summary.assessment_bundle_verified}")
     print(f"  response linked:      {summary.response_link_verified}")
     print(f"  quarantine:           {summary.quarantine_registered}")
@@ -233,6 +263,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if not summary.dry_run:
         if summary.readiness_ready is not True:
+            return 1
+        if summary.baseline_signature_verified is not True:
             return 1
         if not summary.response_link_verified:
             return 1
