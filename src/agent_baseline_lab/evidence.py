@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import EvidenceItem
+from .privacy import sanitize_text, sanitize_value
 
 
 def sha256_file(path: Path) -> str:
@@ -17,14 +18,23 @@ def sha256_file(path: Path) -> str:
 
 
 class EvidenceStore:
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, privacy_root: Path | None = None):
         self.root = root
+        self.privacy_root = privacy_root.resolve() if privacy_root is not None else None
         self.root.mkdir(parents=True, exist_ok=True)
 
     def write_json(self, relative_path: str, payload: Any, description: str = "") -> EvidenceItem:
         path = self.root / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        persisted = (
+            sanitize_value(payload, self.privacy_root)
+            if self.privacy_root is not None
+            else payload
+        )
+        path.write_text(
+            json.dumps(persisted, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         return EvidenceItem(
             path=relative_path,
             sha256=sha256_file(path),
@@ -35,7 +45,12 @@ class EvidenceStore:
     def write_text(self, relative_path: str, text: str, description: str = "") -> EvidenceItem:
         path = self.root / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        persisted = (
+            sanitize_text(text, self.privacy_root)
+            if self.privacy_root is not None
+            else text
+        )
+        path.write_text(persisted, encoding="utf-8")
         return EvidenceItem(
             path=relative_path,
             sha256=sha256_file(path),
