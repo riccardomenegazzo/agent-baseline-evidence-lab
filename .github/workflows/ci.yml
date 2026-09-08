@@ -125,21 +125,38 @@ jobs:
           abl verify-attestation \
             "reports/${run_id}.attestation.json" \
             "${latest}/manifest.sha256.json"
-      - name: Sign and verify the generated run attestation with an ephemeral CI Ed25519 key
+      - name: Sign and verify the generated run attestation with an external CI Ed25519 key
         run: |
           latest=$(ls -1dt evidence/abl-* | head -1)
           run_id=$(basename "$latest")
           python -m agent_baseline_lab.signing keygen \
-            --private .abl/ci-signing/private.json \
-            --public .abl/ci-signing/public.json
+            --private .abl/keys/attestation-private.json \
+            --public .abl/keys/attestation-public.json
           python -m agent_baseline_lab.signing sign \
             "reports/${run_id}.attestation.json" \
-            --private .abl/ci-signing/private.json \
-            --output "reports/${run_id}.attestation.ed25519.json"
+            --private .abl/keys/attestation-private.json \
+            --output "reports/${run_id}.attestation.json.ed25519.json"
           python -m agent_baseline_lab.signing verify \
             "reports/${run_id}.attestation.json" \
-            "reports/${run_id}.attestation.ed25519.json" \
-            --public .abl/ci-signing/public.json
+            "reports/${run_id}.attestation.json.ed25519.json" \
+            --public .abl/keys/attestation-public.json
+      - name: Gate consolidated post-run assurance suite
+        run: >-
+          python -m agent_baseline_lab.assurance_suite
+          --output reports/assurance-summary.json
+      - name: Assert assurance suite has no blocking failures
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('reports/assurance-summary.json').read_text())
+          assert payload['blocking_failures'] == 0
+          checks = {item['name']: item for item in payload['checks']}
+          assert checks['assessment-bundle-integrity']['status'] == 'PASS'
+          assert checks['evidence-trust-boundary-regression']['status'] == 'PASS'
+          assert checks['attestation-signature']['status'] == 'PASS'
+          assert checks['external-signing-anchor']['status'] == 'PASS'
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
