@@ -181,11 +181,21 @@ jobs:
           assert 'security_score' not in payload
           assert 'risk_score' not in payload
           PY
-      - name: Create and verify offline comparison handoff on real evidence
+      - name: Create and verify offline comparison handoff on distinct real evidence
         run: |
-          latest=$(ls -1dt evidence/abl-* | head -1)
+          sleep 1
+          set +e
+          abl assess --config examples/agent.yaml
+          rc=$?
+          set -e
+          test "$rc" -eq 0 -o "$rc" -eq 1
+          mapfile -t runs < <(ls -1dt evidence/abl-* | head -2)
+          test "${#runs[@]}" -eq 2
+          after="${runs[0]}"
+          before="${runs[1]}"
+          test "$(basename "$before")" != "$(basename "$after")"
           python -m agent_baseline_lab.comparison_pack create \
-            "$latest" "$latest" \
+            "$before" "$after" \
             --root . \
             --output reports/governance-comparison-pack.zip
           python -m agent_baseline_lab.comparison_pack verify \
@@ -208,6 +218,8 @@ jobs:
               assert 'comparison/governance-delta.json.ed25519.json' in names
               assert 'trust/attestation-public.json' in names
               assert not any(name.endswith('attestation-private.json') for name in names)
+              manifest = json.loads(zf.read('comparison-manifest.json'))
+              assert manifest['before_run_id'] != manifest['after_run_id']
               delta = json.loads(zf.read('comparison/governance-delta.json'))
               assert delta['change_counts'] == {'unchanged': 35}
           PY
