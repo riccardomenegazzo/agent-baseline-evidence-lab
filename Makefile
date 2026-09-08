@@ -1,5 +1,6 @@
 .PHONY: install test lint preflight readiness readiness-mcp baseline-sync baseline-lock-verify baseline-lock-sign baseline-lock-verify-signature \
 	assess demo verify assurance-latest evidence-matrix governance-delta governance-delta-verify governance-delta-sign governance-delta-sign-verify \
+	experiment-protocol experiment-protocol-verify experiment-protocol-sign experiment-protocol-sign-verify \
 	comparison-pack comparison-pack-verify customer-pack customer-pack-verify audit-summary live-dry-run live-demo live-demo-mcp \
 	mcp-register-dhi mcp-inventory-dhi mcp-bypass-dhi mcp-oauth-status sandbox-create sandbox-run sandbox-shell sandbox-rm \
 	response-drill response-drill-full response-drill-dry-run response-link response-link-verify interview-demo interview-demo-mcp \
@@ -17,6 +18,8 @@ BASELINE_CACHE ?= .cache/agentbaseline
 CUSTOMER_PACK ?= reports/customer-evidence-pack.zip
 DELTA_JSON ?= reports/governance-delta.json
 DELTA_HTML ?= reports/governance-delta.html
+EXPERIMENT_JSON ?= reports/controlled-experiment.json
+EXPERIMENT_HTML ?= reports/controlled-experiment.html
 COMPARISON_PACK ?= reports/governance-comparison-pack.zip
 
 install:
@@ -102,6 +105,26 @@ governance-delta-sign: governance-delta
 governance-delta-sign-verify:
 	$(PYTHON) -m agent_baseline_lab.signing verify "$(DELTA_JSON)" \
 		"$(DELTA_JSON).ed25519.json" --public .abl/keys/attestation-public.json
+
+experiment-protocol:
+	@if [ -z "$(BEFORE)" ] || [ -z "$(AFTER)" ]; then echo "Usage: make experiment-protocol BEFORE=evidence/abl-before AFTER=evidence/abl-after"; exit 1; fi
+	$(PYTHON) -m agent_baseline_lab.experiment_protocol create \
+		"$(BEFORE)" "$(AFTER)" --output "$(EXPERIMENT_JSON)" --html "$(EXPERIMENT_HTML)"
+
+experiment-protocol-verify:
+	@if [ -z "$(BEFORE)" ] || [ -z "$(AFTER)" ]; then echo "Usage: make experiment-protocol-verify BEFORE=evidence/abl-before AFTER=evidence/abl-after"; exit 1; fi
+	$(PYTHON) -m agent_baseline_lab.experiment_protocol verify \
+		"$(EXPERIMENT_JSON)" "$(BEFORE)" "$(AFTER)"
+
+experiment-protocol-sign: experiment-protocol
+	@if [ ! -f .abl/keys/attestation-private.json ]; then echo "Run make signing-keygen first"; exit 1; fi
+	$(PYTHON) -m agent_baseline_lab.signing sign "$(EXPERIMENT_JSON)" \
+		--private .abl/keys/attestation-private.json \
+		--output "$(EXPERIMENT_JSON).ed25519.json"
+
+experiment-protocol-sign-verify:
+	$(PYTHON) -m agent_baseline_lab.signing verify "$(EXPERIMENT_JSON)" \
+		"$(EXPERIMENT_JSON).ed25519.json" --public .abl/keys/attestation-public.json
 
 comparison-pack:
 	@if [ -z "$(BEFORE)" ] || [ -z "$(AFTER)" ]; then echo "Usage: make comparison-pack BEFORE=evidence/abl-before AFTER=evidence/abl-after"; exit 1; fi
