@@ -31,6 +31,7 @@ jobs:
           python -m agent_baseline_lab.portable_pack --help
           python -m agent_baseline_lab.golden_flow --help
           python -m agent_baseline_lab.governance_delta --help
+          python -m agent_baseline_lab.comparison_pack --help
       - run: python -m unittest discover -s sample-app/tests -v
       - name: Exercise metadata-only live-run capsule
         run: abl live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess
@@ -179,6 +180,36 @@ jobs:
           assert 'score' not in payload
           assert 'security_score' not in payload
           assert 'risk_score' not in payload
+          PY
+      - name: Create and verify offline comparison handoff on real evidence
+        run: |
+          latest=$(ls -1dt evidence/abl-* | head -1)
+          python -m agent_baseline_lab.comparison_pack create \
+            "$latest" "$latest" \
+            --root . \
+            --output reports/governance-comparison-pack.zip
+          python -m agent_baseline_lab.comparison_pack verify \
+            reports/governance-comparison-pack.zip \
+            --signature reports/governance-comparison-pack.zip.ed25519.json \
+            --public .abl/keys/attestation-public.json
+      - name: Assert comparison handoff is self-contained and private-key free
+        run: |
+          python - <<'PY'
+          import json
+          import zipfile
+          from pathlib import Path
+          pack = Path('reports/governance-comparison-pack.zip')
+          with zipfile.ZipFile(pack) as zf:
+              names = set(zf.namelist())
+              assert 'comparison-manifest.json' in names
+              assert 'before/customer-evidence-pack.zip' in names
+              assert 'after/customer-evidence-pack.zip' in names
+              assert 'comparison/governance-delta.json' in names
+              assert 'comparison/governance-delta.json.ed25519.json' in names
+              assert 'trust/attestation-public.json' in names
+              assert not any(name.endswith('attestation-private.json') for name in names)
+              delta = json.loads(zf.read('comparison/governance-delta.json'))
+              assert delta['change_counts'] == {'unchanged': 35}
           PY
       - name: Gate consolidated post-run assurance suite
         run: >-
