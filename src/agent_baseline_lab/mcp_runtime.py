@@ -99,7 +99,7 @@ def _extract_labeled(text: str, labels: tuple[str, ...]) -> str | None:
         pattern = rf"(?im)^\s*{re.escape(label)}\s*[:=]\s*(.+?)\s*$"
         match = re.search(pattern, text)
         if match:
-            return match.group(1).strip().strip('"\'')
+            return match.group(1).strip().strip("\"'")
     return None
 
 
