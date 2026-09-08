@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-baseline-evidence-lab"
-version = "0.12.0"
+version = "0.13.0"
 description = "Evidence-driven AI coding-agent governance from Docker Sandbox execution to verifiable OCI artifact lineage and signed customer handoff."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -38,6 +38,7 @@ abl-trust = "agent_baseline_lab.trust_cli:main"
 abl-preflight = "agent_baseline_lab.demo_preflight:main"
 abl-present = "agent_baseline_lab.present:main"
 abl-policy = "agent_baseline_lab.customer_policy:main"
+abl-accept = "agent_baseline_lab.customer_acceptance:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

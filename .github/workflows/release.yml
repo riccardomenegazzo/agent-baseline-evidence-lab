@@ -10,10 +10,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version without the v prefix (for example 0.11.0)"
+        description: "Release version without the v prefix (for example 0.13.0)"
         required: true
         type: string
-        default: "0.11.0"
+        default: "0.13.0"
 
 permissions:
   contents: write
@@ -185,6 +185,8 @@ jobs:
           .release-smoke/bin/python -m pip install dist/*.whl
           .release-smoke/bin/abl --help >/dev/null
           .release-smoke/bin/abl-trust --help >/dev/null
+          .release-smoke/bin/abl-policy --help >/dev/null
+          .release-smoke/bin/abl-accept --help >/dev/null
           .release-smoke/bin/python -m agent_baseline_lab.comparison_pack --help >/dev/null
           .release-smoke/bin/python -m agent_baseline_lab.trusted_artifact --help >/dev/null
           .release-smoke/bin/python -m agent_baseline_lab.trust_handoff --help >/dev/null
