@@ -1,0 +1,21 @@
+schema_version: 1
+id: poc-observe
+version: 1.0.0
+description: >
+  Exploratory customer PoC profile. It permits CONDITIONAL evidence while still
+  forbidding observed FAIL/ERROR assessment results and requiring a verified OCI artifact
+  plus successful independent assurance.
+requirements:
+  decision:
+    allowed:
+      - EVIDENCE_READY
+      - CONDITIONAL
+  trusted_artifact:
+    allowed:
+      - VERIFIED
+  assurance:
+    allowed:
+      - PASS
+  max_assessment_counts:
+    FAIL: 0
+    ERROR: 0
