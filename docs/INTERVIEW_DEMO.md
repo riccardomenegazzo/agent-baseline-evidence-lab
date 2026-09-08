@@ -1,43 +1,66 @@
-# Five-minute technical demo
+# Five-minute technical-manager demo
 
 This walkthrough is designed for a Docker technical manager. It prioritizes customer problem, observed evidence, repeatability and claims boundaries over feature count.
 
 ## Before the call
 
-Install and validate the local environment:
-
 ```bash
 make install
 make preflight
 make baseline-sync
+make baseline-lock-verify
 ```
 
-The preferred community demo is now a single command:
+Optional but recommended before a live interview:
+
+```bash
+make signing-keygen
+make baseline-lock-sign
+make baseline-lock-verify-signature
+```
+
+The private key stays below `.abl/`, which is ignored by Git.
+
+## The preferred demo
+
+Community path:
 
 ```bash
 make interview-demo
 ```
 
-It runs a real Codex task in a unique Docker Sandbox, assesses the resulting environment, performs a disposable response drill against **that exact sandbox**, links response evidence to the immutable assessment, independently verifies the link, and removes only the unique disposable sandbox.
-
-For the MCP / Docker AI Governance variant:
+MCP / Docker AI Governance path, only when the required Docker capabilities are actually available:
 
 ```bash
 make mcp-register-dhi
 make interview-demo-mcp
 ```
 
-Use the MCP variant only when the required Docker capabilities are available. The community path is sufficient to explain the architecture without pretending paid governance evidence exists.
+Zero-mutation rehearsal:
 
-## 0:00–0:30 — Frame the problem
+```bash
+make interview-demo-dry-run
+```
+
+After a real run, add authenticity and consolidated verification:
+
+```bash
+make sign-latest
+make verify-signature-latest
+make assurance-latest
+```
+
+---
+
+## 0:00–0:30 — Frame the customer problem
 
 > Security guidance for AI agents is easy to describe and hard to prove. I wanted to know whether a customer could take a real coding-agent run and answer a narrower question: for this agent, in this environment, during this run, what can we actually prove against the Agent Baseline?
 
 Emphasize that this is a community implementation experiment, not an official Docker or Agent Baseline conformance product.
 
-## 0:30–1:05 — Show the architecture
+---
 
-Open the README architecture diagram:
+## 0:30–1:05 — Show the architecture
 
 ```text
 real coding task
@@ -55,176 +78,191 @@ Agent Baseline Evidence Engine
    └── artifact checks
       │
       ▼
-hash-chained trace + manifest
+hash-chained trace + SHA-256 manifest
       │
-      ├── JSON/HTML assessment
-      └── unsigned run attestation
+      ├── JSON / HTML assessment
+      └── run attestation
       │
       ▼
 response drill
       │
+      ├── verified sandbox stop
+      ├── verified disposable binding removal
+      ├── quarantine registry
+      └── incident bundle
+      │
       ▼
-assessment SHA ─┐
-                ├── verified response-link
-response SHA ───┘
+optional Ed25519 signature + post-run assurance
 ```
 
 The key point:
 
 > The engine never turns product presence into proof of a control.
 
-## 1:05–1:55 — Show a real run
+---
 
-Run:
+## 1:05–1:55 — Run the real lifecycle
 
 ```bash
 make interview-demo
 ```
 
-The final summary should make the lifecycle visible:
+The flow uses the exact unique sandbox created by the agent run. It assesses the result, performs the response drill, links immutable assessment and response evidence, records quarantine state, creates a digest-only incident bundle, verifies all postconditions and then removes only that disposable sandbox.
 
-```text
-INTERVIEW EVIDENCE FLOW
-  session:             agent-...
-  sandbox:             abl-demo-...
-  assessment run:      abl-...
-  bundle verified:     True
-  stop verified:       True
-  credential revoked:  True (Docker sandbox binding)
-  response link:       True
-  cleanup succeeded:   True
-  HTML report:         ...
-```
-
-Explain what the live-run capsule records by default:
+The live-run capsule stores by default:
 
 - task SHA-256, not raw prompt;
 - stdout/stderr SHA-256, not raw model output;
-- disposable workspace before/after content hashes;
-- changed-path set;
-- actual unique sandbox identity;
-- Docker Sandbox policy observations;
-- result of artifact checks against the **agent-modified workspace**.
+- disposable workspace before/after hashes;
+- changed paths;
+- exact sandbox identity;
+- Docker Sandbox observations;
+- artifact-validation results against the agent-modified workspace.
 
-This is useful customer evidence without unnecessarily persisting developer prompt/output content.
+This is useful customer evidence without unnecessarily retaining developer prompt/output content.
 
-## 1:55–2:40 — Show evidence, not a green dashboard
+---
 
-Open the generated HTML report.
+## 1:55–2:35 — Show evidence, not a green dashboard
 
-Select one `PARTIAL` or `MANUAL` control and explain why it did not become `PASS`.
+Open the generated HTML report and choose one `PARTIAL` or `MANUAL` control.
 
-Recommended example:
+Good example:
 
-> A Cedar file describing approval or tool scope is design evidence. Unless I observe the relevant policy decision during execution, I do not call that full authorization proof.
+> A Cedar policy describing tool scope or approval is design evidence. Unless I observe the relevant runtime decision, I do not promote that to full authorization proof.
 
-A second useful example:
+Second example:
 
-> A Docker audit daemon session is not automatically a business-task ID. I distinguish bounded correlation from exact correlation rather than joining events because their timestamps happen to overlap.
+> A Docker audit session is not automatically the same thing as a business-task causal ID. I distinguish exact-marker evidence, bounded correlation and ambiguity instead of joining events because their timestamps overlap.
 
-This credibility rule is more important than maximizing the green count.
+This credibility rule matters more than maximizing the green count.
 
-## 2:40–3:20 — Verify integrity and provenance
+---
 
-Verify the evidence bundle:
+## 2:35–3:15 — Show integrity, authenticity and their limits
 
-```bash
-abl verify evidence/abl-...
-```
-
-Verify the run attestation:
+Internal evidence verification:
 
 ```bash
-abl verify-attestation \
-  reports/abl-....attestation.json \
-  evidence/abl-.../manifest.sha256.json
+make verify
 ```
 
-Explain:
+Portable signature:
 
-> This verifies internal consistency and binds the exported manifest to observed run facts. The statement is intentionally unsigned. I do not call a self-recomputed hash a signature; authenticity needs an external trust anchor.
+```bash
+make sign-latest
+make verify-signature-latest
+```
 
-The trace is append-only and SHA-256 hash-chained. The file bundle has a separate SHA-256 manifest.
+Explain the distinction clearly:
 
-## 3:20–3:50 — Show the adversarial mindset
+> The SHA-256 manifest and hash chain detect evidence mutation. Ed25519 proves the signed bytes relative to a private key. Trust in the signer exists only if the verifier trusts the public key through an external channel.
 
-Point to the executable scenarios:
+Then run:
 
-- host-canary filesystem separation;
-- network-policy decision checks;
-- MCP policy contract validation;
-- agent-generated artifact tests;
-- negative provenance tests where evidence mutation must cause verification failure.
+```bash
+make assurance-latest
+```
 
-The point is not offensive security. It is that every claim should have an explicit failure condition.
+The assurance suite checks:
 
-## 3:50–4:25 — Show response as evidence, not a playbook
+- assessment-bundle integrity;
+- adversarial verifier regression matrix;
+- credential-sensitive/code co-change;
+- behavioral drift when a baseline exists;
+- Ed25519 signature validity;
+- whether an external public-key anchor is present;
+- incident-bundle integrity;
+- quarantine-registry integrity.
 
-The single-command flow already performed the response exercise on the exact unique sandbox created for that run.
+`FINDING` is deliberately different from `FAIL`: drift is something to investigate, while a corrupted evidence bundle or invalid signature is blocking.
 
-The two separate postconditions are:
+---
+
+## 3:15–3:50 — Show the adversarial trust model
+
+The verification matrix demonstrates four different failure boundaries:
+
+1. single-file mutation is detected internally;
+2. trace truncation is detected internally;
+3. a coordinated producer-side rewrite can remain internally self-consistent but is detected by an external anchor;
+4. no exported artifact can prove an event that never entered the evidence pipeline.
+
+The point is not offensive security. It is that every assurance claim has an explicit failure condition and a defined boundary.
+
+---
+
+## 3:50–4:25 — Show response as evidence
+
+The real flow distinguishes:
 
 ```text
-sandbox stop                               VERIFIED
-sandbox-scoped credential binding removal VERIFIED
-upstream provider token invalidation       NOT CLAIMED
+sandbox stop                               VERIFIED when observed
+sandbox-scoped credential binding removal VERIFIED when observed
+upstream provider token invalidation       NOT CLAIMED without provider evidence
+quarantine decision                        RECORDED, not equated with network isolation
+incident bundle                            DIGEST-VERIFIED
 ```
 
-The drill creates random disposable secret material through a host-side command, binds it only to the run sandbox, verifies the placeholder exists, removes only that binding, verifies it is absent, and then independently verifies the sandbox reached a stopped state.
+The original assessment is never rewritten after containment. Post-response evidence is linked by cryptographic digest instead.
 
-No real OpenAI, GitHub, AWS or other provider credential is used.
-
-Then show the response link:
-
-```text
-assessment manifest SHA-256 ──┐
-                              ├── response-link statement
-response evidence SHA-256 ────┘
-```
-
-The original assessment is never rewritten after containment. `response-link-verify` recomputes both digests, validates the assessment bundle, checks the run ID and trace head, re-verifies response claims, and fails on mismatch.
-
-## 4:25–4:45 — Optional: show Docker audit correlation
-
-Only use this section when running with Docker AI Governance audit delivery:
+The provider-revocation adapter is dry-run by default:
 
 ```bash
+make provider-revocation-dry
+```
+
+This demonstrates fail-closed semantics without mutating a real credential.
+
+---
+
+## 4:25–4:45 — Optional MCP / Docker AI Governance evidence
+
+Only show this section when the environment actually supports it.
+
+```bash
+make mcp-inventory-dhi
+make mcp-oauth-status
 make interview-demo-mcp
 ```
 
-The lab generates a deterministic run-scoped hostname under `.correlation.invalid` and performs one bounded network attempt from the exact sandbox. It then looks for that marker in finalized Docker audit `resource_id` evidence.
+With a live sandbox:
 
-Possible outputs are deliberately graded:
-
-```text
-exact-marker
-pending-finalization
-single-daemon-session
-ambiguous-multi-session
-no-observed-correlation
+```bash
+make mcp-bypass-dhi SANDBOX=<sandbox-name>
 ```
 
-Only `exact-marker` means the marker was actually observed in the Docker audit resource.
+The project intentionally separates:
 
-If finalized JSONL was not yet available during the demo, the exact same immutable agent session can be re-analyzed later without rerunning the agent:
+- host-side MCP registration identity;
+- OAuth authorization metadata;
+- Cedar policy design;
+- observed Docker governance decisions;
+- direct sandbox network reachability.
+
+A configured gateway is therefore not treated as proof that direct MCP access is impossible.
+
+Audit correlation can be re-analyzed without rerunning the agent:
 
 ```bash
 make audit-correlate-latest
 ```
 
-To use it as an exact-evidence gate:
+Exact-evidence gate:
 
 ```bash
 make audit-correlate-exact
 ```
 
-See [`AUDIT_CORRELATION.md`](AUDIT_CORRELATION.md).
+---
 
 ## 4:45–5:00 — Close with the CXE-T angle
 
-> I built this as a reusable customer PoC rather than a one-off demo: success criteria, explicit claims boundaries, live architecture validation, reproducible evidence, response testing and a path for implementation feedback upstream. The part that interests me most is taking a recurring customer architecture question and turning it into an asset that can be reused, challenged and improved.
+> I built this as a reusable customer PoC rather than a one-off demo: success criteria, explicit claims boundaries, live architecture validation, reproducible evidence, response testing, post-run assurance and a path for implementation feedback upstream. The part that interests me most is taking a recurring customer architecture question and turning it into an asset that can be reused, challenged and improved.
 
-Then stop. Let the interviewer choose whether to drill into Docker Sandboxes, MCP, evidence integrity, policy design, auditability or the customer PoC model.
+Then stop. Let the interviewer choose whether to drill into Docker Sandboxes, MCP, evidence integrity, policy design, response, auditability or the customer PoC model.
+
+---
 
 ## Do not overclaim
 
@@ -234,9 +272,10 @@ Do not say:
 - "this certifies an agent";
 - "MCP Gateway proves authorization";
 - "the evidence is tamper-proof";
-- "the in-toto-style statement is signed";
+- "a valid signature proves who the signer is";
 - "one Docker audit_session_id proves task-level causality";
-- "removing a sandbox credential binding invalidates the upstream provider token".
+- "removing a sandbox credential binding invalidates the upstream provider token";
+- "a quarantine registry entry means network quarantine happened".
 
 Prefer:
 
@@ -245,7 +284,9 @@ Prefer:
 - partial coverage;
 - exact-marker vs bounded correlation;
 - tamper-evident bundle;
-- unsigned run attestation;
+- portable Ed25519 signature;
+- external public-key trust anchor;
 - scoped credential-binding revocation;
-- external trust anchor;
+- recorded quarantine decision;
+- digest-verified incident bundle;
 - reproducible customer PoC.
