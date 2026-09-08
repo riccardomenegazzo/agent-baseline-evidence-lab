@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
-from .customer_trust_flow import run_customer_trust_flow
+from .customer_trust_flow import CustomerTrustFlowSummary, run_customer_trust_flow
 from .demo_preflight import DemoPreflightSummary, run_demo_preflight
 
 
@@ -15,7 +16,7 @@ def _print_preflight(summary: DemoPreflightSummary) -> None:
     print(f"  READY: {'yes' if summary.ready else 'no'}")
 
 
-def _print_summary(summary) -> None:
+def _print_summary(summary: CustomerTrustFlowSummary) -> None:
     print("CUSTOMER TRUST FLOW")
     print(f"  assessment:       {summary.assessment_run_id}")
     print(f"  agent session:    {summary.agent_session_id}")
@@ -30,7 +31,7 @@ def _print_summary(summary) -> None:
     print("  next:             run `abl-present --open` to review the demo artifacts")
 
 
-def _flow_exit_code(summary) -> int:
+def _flow_exit_code(summary: CustomerTrustFlowSummary) -> int:
     if summary.dry_run:
         return 0
     if summary.overall_status == "BLOCKED":
@@ -81,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         except (OSError, ValueError, RuntimeError, KeyError, json.JSONDecodeError) as exc:
             parser.error(str(exc))
-        output = __import__("pathlib").Path(args.preflight_output)
+        output = Path(args.preflight_output)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(
             json.dumps(preflight.to_dict(), indent=2, sort_keys=True) + "\n",
