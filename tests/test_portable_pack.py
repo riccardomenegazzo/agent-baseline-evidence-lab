@@ -61,6 +61,7 @@ def test_portable_pack_excludes_private_key_and_verifies(tmp_path: Path, monkeyp
         manifest = json.loads(zf.read("pack-manifest.json"))
         assert "private signing keys" in manifest["excluded_categories"]
         assert "host filesystem paths from incident manifests" in manifest["excluded_categories"]
+        assert "local project/home path prefixes" in manifest["excluded_categories"]
 
 
 def test_portable_pack_detects_member_tampering(tmp_path: Path, monkeypatch) -> None:
@@ -155,6 +156,23 @@ def test_portable_pack_rejects_external_incident_artifact(tmp_path: Path, monkey
     )
 
     with pytest.raises(ValueError, match="outside project root"):
+        portable_pack.create_pack(
+            root,
+            output_path=root / "reports" / "customer-evidence-pack.zip",
+            run_id=run_id,
+        )
+
+
+def test_portable_pack_rejects_project_path_leakage(tmp_path: Path, monkeypatch) -> None:
+    root, run_id = _project(tmp_path)
+    _trust_bundle(monkeypatch)
+    leaked_report = root / "reports" / f"{run_id}.html"
+    leaked_report.write_text(
+        f"<html><body>workspace={root / '.abl-workspaces' / 'agent-1'}</body></html>\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="local filesystem path marker"):
         portable_pack.create_pack(
             root,
             output_path=root / "reports" / "customer-evidence-pack.zip",
