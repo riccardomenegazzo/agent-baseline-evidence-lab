@@ -54,11 +54,15 @@ def test_human_fallback_executes_without_agent(tmp_path: Path) -> None:
         reason="agent disabled for response exercise",
         commands=[["python3", "-c", "from pathlib import Path; assert Path('ok.txt').exists()"]],
         output_path=output,
+        privacy_root=tmp_path,
     )
     assert result.fallback_verified is True
     assert result.agent_execution_required is False
+    assert result.workspace == "workspace"
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["reviewer"] == "human-reviewer"
+    assert payload["workspace"] == "workspace"
+    assert str(tmp_path) not in output.read_text(encoding="utf-8")
 
 
 def test_provider_revocation_is_fail_closed_by_default() -> None:
