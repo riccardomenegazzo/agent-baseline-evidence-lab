@@ -180,6 +180,7 @@ jobs:
       - name: Smoke-test the built wheel in a clean environment
         if: steps.existing.outputs.exists != 'true'
         run: |
+          set -euo pipefail
           python -m venv .release-smoke
           .release-smoke/bin/python -m pip install -U pip
           .release-smoke/bin/python -m pip install dist/*.whl
@@ -187,6 +188,12 @@ jobs:
           .release-smoke/bin/abl-trust --help >/dev/null
           .release-smoke/bin/abl-policy --help >/dev/null
           .release-smoke/bin/abl-accept --help >/dev/null
+          .release-smoke/bin/abl-policy list-profiles | grep -qx 'poc-observe'
+          .release-smoke/bin/abl-policy list-profiles | grep -qx 'enterprise-strict'
+          policy_tmp=$(mktemp)
+          .release-smoke/bin/abl-policy export-profile enterprise-strict --output "$policy_tmp"
+          test -s "$policy_tmp"
+          grep -q '^id: enterprise-strict$' "$policy_tmp"
           .release-smoke/bin/python -m agent_baseline_lab.comparison_pack --help >/dev/null
           .release-smoke/bin/python -m agent_baseline_lab.trusted_artifact --help >/dev/null
           .release-smoke/bin/python -m agent_baseline_lab.trust_handoff --help >/dev/null

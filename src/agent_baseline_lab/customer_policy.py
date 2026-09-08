@@ -5,6 +5,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from importlib import resources
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,8 @@ SUPPORTED_STATUS_REQUIREMENTS = {
     "assurance": "assurance_status",
 }
 SUPPORTED_COUNT_STATUSES = {"PASS", "FAIL", "PARTIAL", "MANUAL", "N/A", "ERROR"}
+BUILTIN_PROFILE_NAMES = ("poc-observe", "enterprise-strict")
+BUILTIN_PREFIX = "builtin:"
 
 
 @dataclass(frozen=True)
@@ -62,14 +65,57 @@ def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def load_policy_profile(path: str | Path) -> tuple[dict[str, Any], str]:
-    source = Path(path)
-    if not source.is_file():
-        raise ValueError(f"policy profile does not exist: {source}")
+def _builtin_name(source: str | Path) -> str | None:
+    value = str(source)
+    if not value.startswith(BUILTIN_PREFIX):
+        return None
+    name = value[len(BUILTIN_PREFIX) :].strip()
+    if name not in BUILTIN_PROFILE_NAMES:
+        raise ValueError(
+            f"unknown built-in policy profile {name!r}; available: "
+            + ", ".join(BUILTIN_PROFILE_NAMES)
+        )
+    return name
+
+
+def policy_source_bytes(source: str | Path) -> bytes:
+    name = _builtin_name(source)
+    if name is not None:
+        resource = resources.files("agent_baseline_lab.policy_profiles").joinpath(f"{name}.yaml")
+        try:
+            return resource.read_bytes()
+        except (FileNotFoundError, ModuleNotFoundError) as exc:
+            raise ValueError(f"built-in policy profile is unavailable: {name}") from exc
+
+    path = Path(source)
+    if not path.is_file():
+        raise ValueError(f"policy profile does not exist: {path}")
+    return path.read_bytes()
+
+
+def export_builtin_profile(
+    name: str,
+    output: str | Path,
+    *,
+    force: bool = False,
+) -> Path:
+    source = f"{BUILTIN_PREFIX}{name}"
+    data = policy_source_bytes(source)
+    destination = Path(output)
+    if destination.exists() and not force:
+        raise ValueError(f"refusing to overwrite existing policy profile: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(data)
+    return destination
+
+
+def load_policy_profile(source: str | Path) -> tuple[dict[str, Any], str]:
+    data = policy_source_bytes(source)
+    label = str(source)
     try:
-        payload = yaml.safe_load(source.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        raise ValueError(f"invalid policy profile YAML {source}: {exc}") from exc
+        payload = yaml.safe_load(data.decode("utf-8"))
+    except (UnicodeDecodeError, yaml.YAMLError) as exc:
+        raise ValueError(f"invalid policy profile YAML {label}: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError("policy profile must contain a YAML object")
     if payload.get("schema_version") != 1:
@@ -262,18 +308,34 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
+    list_profiles = sub.add_parser("list-profiles")
+    list_profiles.set_defaults(action="list-profiles")
+
+    export = sub.add_parser("export-profile")
+    export.add_argument("name", choices=BUILTIN_PROFILE_NAMES)
+    export.add_argument("--output", required=True)
+    export.add_argument("--force", action="store_true")
+
     evaluate = sub.add_parser("evaluate")
-    evaluate.add_argument("profile")
+    evaluate.add_argument("profile", help="path or builtin:<name>")
     evaluate.add_argument("decision")
     evaluate.add_argument("--output", default="reports/customer-policy-evaluation.json")
 
     verify = sub.add_parser("verify")
     verify.add_argument("evaluation")
-    verify.add_argument("profile")
+    verify.add_argument("profile", help="path or builtin:<name>")
     verify.add_argument("decision")
 
     args = parser.parse_args(argv)
     try:
+        if args.command == "list-profiles":
+            for name in BUILTIN_PROFILE_NAMES:
+                print(name)
+            return 0
+        if args.command == "export-profile":
+            output = export_builtin_profile(args.name, args.output, force=args.force)
+            print(output)
+            return 0
         if args.command == "evaluate":
             result = create_policy_evaluation(args.profile, args.decision, output=args.output)
             print("CUSTOMER POLICY EVALUATION")

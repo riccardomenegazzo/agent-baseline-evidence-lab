@@ -1,0 +1,25 @@
+schema_version: 1
+id: enterprise-strict
+version: 1.0.0
+description: >
+  Strict promotion-oriented example profile. It requires an evidence-ready decision,
+  verified OCI artifact, passing Docker Scout policy evaluation, successful independent
+  assurance, and no unresolved FAIL/ERROR/PARTIAL/MANUAL Agent Baseline results.
+requirements:
+  decision:
+    allowed:
+      - EVIDENCE_READY
+  trusted_artifact:
+    allowed:
+      - VERIFIED
+  docker_scout:
+    allowed:
+      - PASS
+  assurance:
+    allowed:
+      - PASS
+  max_assessment_counts:
+    FAIL: 0
+    ERROR: 0
+    PARTIAL: 0
+    MANUAL: 0

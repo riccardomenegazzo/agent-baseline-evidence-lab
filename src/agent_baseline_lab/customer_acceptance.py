@@ -10,7 +10,12 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .customer_policy import evaluate_policy, load_policy_profile, verify_policy_evaluation
+from .customer_policy import (
+    evaluate_policy,
+    load_policy_profile,
+    policy_source_bytes,
+    verify_policy_evaluation,
+)
 from .evidence import sha256_file
 from .signing import sign_file, verify_signature
 from .trust_handoff import verify_handoff_pack
@@ -97,11 +102,11 @@ def _decision_from_handoff(handoff: Path) -> tuple[bytes, str]:
 
 
 def _materialize_policy_evaluation(
-    policy_path: Path,
+    policy_source: str | Path,
     decision_bytes: bytes,
     destination: Path,
 ) -> tuple[dict[str, Any], str]:
-    profile, profile_sha256 = load_policy_profile(policy_path)
+    profile, profile_sha256 = load_policy_profile(policy_source)
     try:
         decision = json.loads(decision_bytes.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -129,16 +134,16 @@ def create_acceptance_pack(
     handoff_signature = Path(handoff_signature_path)
     public_key = Path(public_key_path)
     private_key = Path(private_key_path)
-    policy = Path(policy_path)
+    policy_source = policy_path
     for label, path in (
         ("handoff", handoff),
         ("handoff signature", handoff_signature),
         ("public key", public_key),
         ("private key", private_key),
-        ("customer policy", policy),
     ):
         if not path.is_file():
             raise ValueError(f"{label} does not exist: {path}")
+    policy_bytes = policy_source_bytes(policy_source)
 
     handoff_ok, handoff_errors, handoff_details = verify_handoff_pack(handoff)
     if not handoff_ok:
@@ -166,7 +171,7 @@ def create_acceptance_pack(
         decision.write_bytes(decision_bytes)
         evaluation = tmp_root / "customer-policy-evaluation.json"
         evaluation_payload, profile_sha256 = _materialize_policy_evaluation(
-            policy,
+            policy_source,
             decision_bytes,
             evaluation,
         )
@@ -239,7 +244,7 @@ def create_acceptance_pack(
                 handoff_signature.read_bytes(),
             ),
             ("public-verification-key", "trust/attestation-public.json", public_key.read_bytes()),
-            ("customer-policy-profile", "policy/customer-policy.yaml", policy.read_bytes()),
+            ("customer-policy-profile", "policy/customer-policy.yaml", policy_bytes),
             (
                 "customer-policy-evaluation",
                 "policy/customer-policy-evaluation.json",
@@ -506,7 +511,7 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--handoff-signature", required=True)
     create.add_argument("--public-key", default=".abl/keys/attestation-public.json")
     create.add_argument("--private-key", default=".abl/keys/attestation-private.json")
-    create.add_argument("--policy", required=True)
+    create.add_argument("--policy", required=True, help="path or builtin:<name>")
     create.add_argument("--output", default="reports/customer-acceptance-envelope.zip")
 
     verify = sub.add_parser("verify")

@@ -43,6 +43,9 @@ abl-accept = "agent_baseline_lab.customer_acceptance:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"agent_baseline_lab.policy_profiles" = ["*.yaml"]
+
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
