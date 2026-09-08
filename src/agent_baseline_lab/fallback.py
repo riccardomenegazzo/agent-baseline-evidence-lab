@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -107,15 +108,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--reviewer", required=True)
     parser.add_argument("--reason", required=True)
-    parser.add_argument("--command", action="append", nargs="+", required=True)
+    parser.add_argument(
+        "--command",
+        action="append",
+        required=True,
+        metavar="COMMAND",
+        help="shell-like command string; repeat for multiple checks (executed without shell=True)",
+    )
     parser.add_argument("--output", default="reports/fallback.json")
     args = parser.parse_args(argv)
     try:
+        commands = [shlex.split(value) for value in args.command]
         result = run_fallback(
             args.workspace,
             reviewer=args.reviewer,
             reason=args.reason,
-            commands=args.command,
+            commands=commands,
             output_path=args.output,
         )
     except (OSError, ValueError) as exc:
