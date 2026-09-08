@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
@@ -20,15 +20,38 @@ class MCPPolicyAnalysis:
     has_approval_guard: bool
     has_local_stdio_forbid: bool
     has_identity_url_binding: bool
+    permitted_primordials: list[str]
+    forbidden_primordials: list[str]
+    has_authorize_primordial_forbid: bool
+    has_dynamic_gateway_forbid: bool
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
+
+
+def _primordials_by_effect(normalized: str, effect: str) -> list[str]:
+    names: set[str] = set()
+    for match in re.finditer(rf"\b{effect}\s*\([^;]+;", normalized, re.DOTALL):
+        statement = match.group(0)
+        if 'MCP::Action::"invokePrimordial"' not in statement:
+            continue
+        names.update(re.findall(r'MCP::Primordial::"([^"]+)"', statement))
+    return sorted(names)
 
 
 def analyze_policy(path: str | Path) -> MCPPolicyAnalysis:
     p = Path(path)
     text = p.read_text(encoding="utf-8")
     normalized = re.sub(r"//.*?$", "", text, flags=re.MULTILINE)
+    permitted_primordials = _primordials_by_effect(normalized, "permit")
+    forbidden_primordials = _primordials_by_effect(normalized, "forbid")
+    dynamic_gateway_names = {
+        "mcp-add",
+        "mcp-exec",
+        "mcp-find",
+        "mcp-config-set",
+        "code-mode",
+    }
     return MCPPolicyAnalysis(
         path=str(p),
         permit_statements=len(re.findall(r"\bpermit\s*\(", normalized)),
@@ -47,4 +70,8 @@ def analyze_policy(path: str | Path) -> MCPPolicyAnalysis:
             re.search(r"forbid\s*\([^;]+resource\.type\s*==\s*\"local-stdio\"", normalized, re.DOTALL)
         ),
         has_identity_url_binding="resource.identityURL" in normalized,
+        permitted_primordials=permitted_primordials,
+        forbidden_primordials=forbidden_primordials,
+        has_authorize_primordial_forbid=any(name.endswith("-authorize") for name in forbidden_primordials),
+        has_dynamic_gateway_forbid=dynamic_gateway_names.issubset(set(forbidden_primordials)),
     )
