@@ -1,5 +1,6 @@
-.PHONY: install test lint preflight baseline-sync assess demo verify evidence-matrix audit-summary \
-	live-dry-run live-demo live-demo-mcp mcp-register-dhi mcp-inventory-dhi mcp-bypass-dhi \
+.PHONY: install test lint preflight baseline-sync baseline-lock-verify baseline-lock-sign baseline-lock-verify-signature \
+	assess demo verify evidence-matrix audit-summary \
+	live-dry-run live-demo live-demo-mcp mcp-register-dhi mcp-inventory-dhi mcp-bypass-dhi mcp-oauth-status \
 	sandbox-create sandbox-run sandbox-shell sandbox-rm \
 	response-drill response-drill-full response-drill-dry-run response-link response-link-verify \
 	interview-demo interview-demo-mcp interview-demo-dry-run audit-correlate-latest audit-correlate-exact \
@@ -11,6 +12,8 @@ PYTHON := $(VENV)/bin/python
 ABL := $(VENV)/bin/abl
 SANDBOX ?= abl-demo
 MCP_HOST ?= dhi.io
+MCP_SERVER ?= dhi
+BASELINE_CACHE ?= .cache/agent-baseline
 
 install:
 	python3 -m venv $(VENV)
@@ -30,6 +33,22 @@ preflight:
 baseline-sync:
 	$(ABL) sync-baseline
 
+baseline-lock-verify:
+	$(PYTHON) -m agent_baseline_lab.baseline "$(BASELINE_CACHE)"
+
+baseline-lock-sign: baseline-lock-verify
+	@if [ ! -f .abl/keys/attestation-private.json ]; then echo "Run make signing-keygen first"; exit 1; fi
+	$(PYTHON) -m agent_baseline_lab.signing sign \
+		"$(BASELINE_CACHE)/baseline.lock.json" \
+		--private .abl/keys/attestation-private.json \
+		--output "$(BASELINE_CACHE)/baseline.lock.ed25519.json"
+
+baseline-lock-verify-signature: baseline-lock-verify
+	$(PYTHON) -m agent_baseline_lab.signing verify \
+		"$(BASELINE_CACHE)/baseline.lock.json" \
+		"$(BASELINE_CACHE)/baseline.lock.ed25519.json" \
+		--public .abl/keys/attestation-public.json
+
 assess:
 	$(ABL) assess --config examples/agent.yaml
 
@@ -40,20 +59,17 @@ verify:
 	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
 	$(ABL) verify "$$latest"
 
-# Reproducibly attack disposable copies of the latest verified bundle.
 evidence-matrix:
 	@latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
 	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
 	$(PYTHON) -m agent_baseline_lab.evidence_matrix "$$latest" \
 		--output reports/evidence-verification-matrix.json
 
-# Generate a local Ed25519 keypair. Keep the private key outside version control.
 signing-keygen:
 	$(PYTHON) -m agent_baseline_lab.signing keygen \
 		--private .abl/keys/attestation-private.json \
 		--public .abl/keys/attestation-public.json
 
-# Sign the latest run attestation. Requires `make signing-keygen` first.
 sign-latest:
 	@latest=$$(ls -1t reports/abl-*.attestation.json 2>/dev/null | head -1); \
 	if [ -z "$$latest" ]; then echo "No run attestation found"; exit 1; fi; \
@@ -80,49 +96,45 @@ audit-correlate-exact:
 	if [ -z "$$latest" ]; then echo "No agent run found"; exit 1; fi; \
 	$(PYTHON) -m agent_baseline_lab.audit_correlation "$$latest/session.json" --require-exact
 
-# Observe host-managed Docker MCP registrations and verify DHI identity.
 mcp-inventory-dhi:
 	$(PYTHON) -m agent_baseline_lab.mcp_inventory \
 		--expect dhi=https://dhi.io/mcp \
 		--output reports/mcp-inventory.json
 
-# Requires a live sandbox. PASS means direct sandbox egress to DHI is denied,
-# while the host-side MCP gateway remains a separate governed path.
 mcp-bypass-dhi:
 	$(PYTHON) -m agent_baseline_lab.mcp_bypass \
 		--sandbox "$(SANDBOX)" --host "$(MCP_HOST)" \
 		--output reports/mcp-bypass.json
 
-# Create a behavioral baseline from the latest assessment trace.
+mcp-oauth-status:
+	$(PYTHON) -m agent_baseline_lab.oauth_state "$(MCP_SERVER)" \
+		--output reports/mcp-oauth-status.json
+
 drift-baseline:
 	@latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
 	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
 	$(PYTHON) -m agent_baseline_lab.drift create "$$latest/trace/events.ndjson" \
 		--output .abl/baselines/behavior.json
 
-# Compare the latest assessment against the retained behavioral baseline.
 drift-compare:
 	@latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
 	if [ -z "$$latest" ]; then echo "No evidence run found"; exit 1; fi; \
 	$(PYTHON) -m agent_baseline_lab.drift compare .abl/baselines/behavior.json \
 		"$$latest/trace/events.ndjson" --output reports/behavior-drift.json
 
-# Detect credential-sensitive path changes in the latest agent workspace delta.
 unintended-latest:
 	@latest=$$(ls -1dt agent-runs/agent-* 2>/dev/null | head -1); \
 	if [ -z "$$latest" ]; then echo "No agent run found"; exit 1; fi; \
 	$(PYTHON) -m agent_baseline_lab.unintended_action \
 		"$$latest/workspace-changes.json" --output reports/unintended-action.json
 
-# Demonstrate the non-agent validation path on the sample application.
 fallback-demo:
 	$(PYTHON) -m agent_baseline_lab.fallback \
 		--workspace sample-app --reviewer demo-human-reviewer \
 		--reason "agent disabled for fallback exercise" \
-		--command python3 -m unittest discover -s tests -v \
+		--command "python3 -m unittest discover -s tests -v" \
 		--output reports/fallback.json
 
-# Register the latest response evidence as a quarantine decision for its sandbox.
 quarantine-latest:
 	@response=$$(ls -1t .abl/response/*.json 2>/dev/null | head -1); \
 	latest=$$(ls -1dt evidence/abl-* 2>/dev/null | head -1); \
@@ -134,7 +146,6 @@ quarantine-latest:
 		--reason "verified response containment" --run-id "$$run_id" \
 		--response-evidence "$$response"
 
-# Build a digest-only incident manifest from the latest assessment + response + quarantine registry.
 incident-bundle-latest:
 	@assessment=$$(ls -1t reports/abl-*.json 2>/dev/null | grep -v -E 'attestation|response-link|interview-demo' | head -1); \
 	response=$$(ls -1t .abl/response/*.json 2>/dev/null | head -1); \
@@ -146,12 +157,10 @@ incident-bundle-latest:
 		--artifact "assessment=$$assessment" --artifact "response=$$response" \
 		--artifact "quarantine-registry=.abl/quarantine/registry.ndjson"
 
-# Explicitly non-mutating provider-adapter preview.
 provider-revocation-dry:
 	$(PYTHON) -m agent_baseline_lab.provider_revocation docker-mcp-oauth dhi \
 		--output reports/provider-revocation-dry.json
 
-# CI-safe proof that the live-run capsule is metadata-only and internally verifiable.
 live-dry-run:
 	$(ABL) live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess
 
