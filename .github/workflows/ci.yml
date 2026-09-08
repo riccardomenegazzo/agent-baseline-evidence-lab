@@ -30,6 +30,7 @@ jobs:
           python -m agent_baseline_lab.readiness --help
           python -m agent_baseline_lab.portable_pack --help
           python -m agent_baseline_lab.golden_flow --help
+          python -m agent_baseline_lab.governance_delta --help
       - run: python -m unittest discover -s sample-app/tests -v
       - name: Exercise metadata-only live-run capsule
         run: abl live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess
@@ -149,6 +150,36 @@ jobs:
             "reports/${run_id}.attestation.json" \
             "reports/${run_id}.attestation.json.ed25519.json" \
             --public .abl/keys/attestation-public.json
+      - name: Create verify and sign governance self-delta on real evidence
+        run: |
+          latest=$(ls -1dt evidence/abl-* | head -1)
+          python -m agent_baseline_lab.governance_delta create \
+            "$latest" "$latest" \
+            --output reports/governance-delta.json \
+            --html reports/governance-delta.html
+          python -m agent_baseline_lab.governance_delta verify \
+            reports/governance-delta.json "$latest" "$latest"
+          python -m agent_baseline_lab.signing sign \
+            reports/governance-delta.json \
+            --private .abl/keys/attestation-private.json \
+            --output reports/governance-delta.json.ed25519.json
+          python -m agent_baseline_lab.signing verify \
+            reports/governance-delta.json \
+            reports/governance-delta.json.ed25519.json \
+            --public .abl/keys/attestation-public.json
+      - name: Assert self-delta has no invented scoring or changes
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('reports/governance-delta.json').read_text())
+          assert payload['comparable'] is True
+          assert payload['change_counts'] == {'unchanged': 35}
+          assert payload['before']['manifest_sha256'] == payload['after']['manifest_sha256']
+          assert 'score' not in payload
+          assert 'security_score' not in payload
+          assert 'risk_score' not in payload
+          PY
       - name: Gate consolidated post-run assurance suite
         run: >-
           python -m agent_baseline_lab.assurance_suite
