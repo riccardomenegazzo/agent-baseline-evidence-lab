@@ -11,6 +11,7 @@ from .evaluators import evaluate
 from .evidence import EvidenceStore, sha256_file
 from .live_run import load_agent_run
 from .models import RunReport
+from .privacy import portable_path
 from .provenance import write_run_attestation
 from .report import write_html_report, write_json_report
 from .trace import TraceLedger
@@ -30,20 +31,23 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
     out = Path(output_root).resolve()
     evidence_dir = out / "evidence" / run_id
     report_dir = out / "reports"
-    store = EvidenceStore(evidence_dir)
+    store = EvidenceStore(evidence_dir, privacy_root=out)
     trace_path = evidence_dir / "trace" / "events.ndjson"
     trace = TraceLedger(trace_path, run_id)
+    config_path_ref = portable_path(out, cfg_path)
+    source_config_sha256 = sha256_file(cfg_path)
 
     cfg_ev = store.write_text(
         "inputs/assessment-config.yaml",
         cfg_path.read_text(encoding="utf-8"),
-        "Exact assessment configuration used for the run.",
+        "Assessment configuration snapshot with project/home path prefixes minimized before persistence.",
     )
     ctx = {
         "run_id": run_id,
         "started_at": started,
-        "config_path": str(cfg_path),
+        "config_path": config_path_ref,
         "config_sha256": cfg_ev.sha256,
+        "source_config_sha256": source_config_sha256,
         "trace": trace,
         "trace_path": trace_path,
     }
@@ -56,6 +60,8 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
         attributes={
             "baseline_version": str(get_path(cfg, "baseline.version", "1.0-draft")),
             "config_sha256": cfg_ev.sha256,
+            "source_config_sha256": source_config_sha256,
+            "path_minimized": True,
         },
     )
 
@@ -132,9 +138,6 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
         result="completed",
     )
 
-    # Optional Docker AI Governance audit ingestion. Local audit records are metadata-only,
-    # but they contain identity/action/target/decision/time. Sensitive host/user fields are
-    # pseudonymized with this run ID before being persisted as evidence.
     audit_cfg = get_path(cfg, "assessment.docker_audit", {})
     if isinstance(audit_cfg, dict) and audit_cfg.get("enabled") is True:
         audit_records, audit_summary = load_audit_records(
@@ -176,7 +179,6 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
         ctx["docker_audit_summary"] = audit_summary.to_dict()
         ctx["docker_audit_evidence"] = audit_ev
 
-    # Evaluate telemetry/integrity controls only after the rest of the run has produced evidence.
     for control in CONTROLS:
         if control.id in TRACE_DEPENDENT_CONTROLS:
             results_by_id[control.id] = evaluate(control.id, cfg, store, ctx)
@@ -197,12 +199,14 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
         started_at=started,
         completed_at=completed,
         baseline_version=str(cfg.get("baseline", {}).get("version", "1.0-draft")),
-        config_path=str(cfg_path),
+        config_path=config_path_ref,
         results=results,
         metadata={
             "agent_id": cfg.get("agent", {}).get("id"),
             "sandbox": cfg.get("sandbox", {}).get("name"),
             "config_sha256": cfg_ev.sha256,
+            "source_config_sha256": source_config_sha256,
+            "path_minimization": "project/home prefixes replaced before evidence persistence",
             "trace_ledger": str(trace_path.relative_to(out)),
             "trace_head_sha256": trace.head_hash,
             "trace_event_count": trace.sequence,
