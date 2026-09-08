@@ -3,9 +3,10 @@
 	live-dry-run live-demo live-demo-mcp mcp-register-dhi mcp-inventory-dhi mcp-bypass-dhi mcp-oauth-status \
 	sandbox-create sandbox-run sandbox-shell sandbox-rm \
 	response-drill response-drill-full response-drill-dry-run response-link response-link-verify \
-	interview-demo interview-demo-mcp interview-demo-dry-run audit-correlate-latest audit-correlate-exact \
-	signing-keygen sign-latest verify-signature-latest drift-baseline drift-compare unintended-latest \
-	fallback-demo quarantine-latest incident-bundle-latest provider-revocation-dry
+	interview-demo interview-demo-mcp interview-demo-dry-run golden-demo golden-demo-mcp golden-demo-dry-run \
+	audit-correlate-latest audit-correlate-exact signing-keygen sign-latest verify-signature-latest \
+	drift-baseline drift-compare unintended-latest fallback-demo quarantine-latest incident-bundle-latest \
+	provider-revocation-dry
 
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
@@ -208,6 +209,19 @@ interview-demo-mcp: readiness-mcp
 interview-demo-dry-run:
 	$(PYTHON) -m agent_baseline_lab.interview_demo \
 		--config examples/agent.yaml --task examples/task.md --dry-run
+
+# Preferred manager-facing lifecycle. The live variants fail closed unless the
+# baseline has been synced, signed and the local Docker prerequisites verify.
+golden-demo:
+	$(PYTHON) -m agent_baseline_lab.golden_flow \
+		--profile community --baseline-cache "$(BASELINE_CACHE)"
+
+golden-demo-mcp:
+	$(PYTHON) -m agent_baseline_lab.golden_flow \
+		--profile mcp --baseline-cache "$(BASELINE_CACHE)"
+
+golden-demo-dry-run:
+	$(PYTHON) -m agent_baseline_lab.golden_flow --profile community --dry-run
 
 response-drill:
 	$(PYTHON) -m agent_baseline_lab.response --sandbox abl-demo --output .abl/response/abl-demo-stop.json
