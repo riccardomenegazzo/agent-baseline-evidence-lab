@@ -9,6 +9,7 @@ from typing import Any
 
 from .evidence import sha256_file
 from .live_run import load_agent_run
+from .trusted_artifact import verify_oci_attestations
 
 STATEMENT_TYPE = "https://in-toto.io/Statement/v1"
 PREDICATE_TYPE = "https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/agent-artifact-lineage/v1"
@@ -100,6 +101,9 @@ def create_lineage_statement(
     observed_archive = sha256_file(archive)
     if observed_archive != expected_archive:
         raise ValueError("trusted OCI archive digest does not match its report")
+    oci_ok, oci_errors, oci_summary = verify_oci_attestations(archive)
+    if not oci_ok:
+        raise ValueError("trusted OCI archive failed independent attestation verification: " + "; ".join(oci_errors))
 
     task = session.get("task", {}) or {}
     execution = session.get("execution", {}) or {}
@@ -136,11 +140,14 @@ def create_lineage_statement(
                 "ociArchiveSha256": observed_archive,
                 "trustedArtifactStatus": str(trusted.get("overall_status", "")),
                 "scoutStatus": str(trusted.get("scout_status", "")),
+                "ociAttestationsVerified": True,
+                "predicateTypes": oci_summary.get("predicate_types", []),
+                "subjectBindingsValid": oci_summary.get("subject_bindings_valid", False),
             },
             "claimsBoundary": (
                 "This statement proves a local cryptographic linkage from one verified agent-run capsule and its "
-                "unchanged post-task workspace to one verified OCI archive. It does not establish human/signer "
-                "identity, source completeness, model intent, official Docker conformance, or artifact deployment."
+                "unchanged post-task workspace to one independently verified OCI archive. It does not establish "
+                "human/signer identity, source completeness, model intent, official Docker conformance, or artifact deployment."
             ),
         },
     }
@@ -164,9 +171,9 @@ def verify_lineage_statement(
     if not statement_file.is_absolute():
         statement_file = root / statement_file
     errors: list[str] = []
+    regenerated_path = root / ".abl" / "lineage-verification.json"
     try:
         observed = _load_json(statement_file)
-        regenerated_path = root / ".abl" / "lineage-verification.json"
         expected = create_lineage_statement(
             session_path,
             trusted_artifact_path,
@@ -188,9 +195,10 @@ def verify_lineage_statement(
             errors.append("lineage subject does not match the current trusted OCI artifact")
         if observed_predicate != expected_predicate:
             errors.append("lineage predicate does not match current verified source evidence")
-        regenerated_path.unlink(missing_ok=True)
     except (OSError, ValueError) as exc:
         errors.append(str(exc))
+    finally:
+        regenerated_path.unlink(missing_ok=True)
     summary = {
         "verified": not errors,
         "statement_sha256": sha256_file(statement_file) if statement_file.is_file() else "",
