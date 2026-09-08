@@ -4,16 +4,16 @@ This guide is the shortest path for showing the project to a technical stakehold
 
 The demo is designed around one question:
 
-> **Can we move from an AI-agent governance claim to evidence that another person can verify?**
+> **Can we move from an AI coding-agent governance claim all the way to a container artifact and customer handoff that another person can verify?**
 
 ## Recommended format
 
 - **2 minutes** — problem and architecture;
-- **3 minutes** — run / inspect evidence;
-- **2 minutes** — before/after governance comparison;
+- **4 minutes** — Customer Trust Flow;
+- **2 minutes** — inspect trust evidence and decision;
 - **2 minutes** — claims boundary and discussion.
 
-The live path is preferable when Docker Sandboxes prerequisites are available. The dry-run path is intentionally non-destructive and must never claim live containment, revocation or runtime enforcement.
+The live path is preferable when Docker Sandboxes and Buildx prerequisites are available. The dry-run path is intentionally non-destructive and must never claim live containment, artifact lineage or runtime enforcement.
 
 ---
 
@@ -21,15 +21,18 @@ The live path is preferable when Docker Sandboxes prerequisites are available. T
 
 Start from the repository home rather than the code.
 
-The core message is:
+Use this framing:
 
-> An enterprise does not only need to know that an AI agent is sandboxed. It needs to know what was observed, which control conclusion came from which evidence, what remains unproven, and whether the evidence can be independently verified.
+> An enterprise adopting coding agents needs more than “the agent is sandboxed”. It needs to know what the agent actually ran, what governance evidence was observed, what artifact came out of that workspace, whether SBOM/provenance bind to the artifact, whether policy checks passed, and whether a reviewer can verify the whole chain independently.
 
-Point out that the project deliberately avoids a synthetic security score.
+Then point out two deliberate design choices:
+
+- there is no synthetic security score;
+- unsupported claims remain non-green.
 
 ---
 
-## 2. Show the safe path first
+## 2. Run the safe trust-flow path first
 
 Install from source:
 
@@ -37,31 +40,38 @@ Install from source:
 make install
 ```
 
-Then run the non-mutating orchestration check:
+Then run the complete non-mutating trust lifecycle:
 
 ```bash
-make golden-demo-dry-run
+make customer-trust-dry-run
 ```
+
+The target creates a local demo signing key only when one does not already exist, then exercises the full orchestration in dry-run mode.
 
 What this demonstrates:
 
-- the complete orchestration path can be exercised without creating a live agent run;
-- positive response and revocation claims remain false;
-- signed and portable handoff mechanics can still be validated;
-- the CI enforces those fail-closed semantics.
+- assessment, assurance, trusted-artifact and handoff orchestration are wired together;
+- the handoff can be built, signed and independently verified;
+- privacy checks remain active;
+- dry-run cannot create agent-to-artifact lineage;
+- dry-run cannot claim live Docker containment or Scout enforcement.
 
 What it does **not** demonstrate:
 
 - live Docker Sandbox isolation;
-- runtime network enforcement;
-- live MCP execution;
-- actual provider-side credential revocation.
+- live network enforcement;
+- a real Buildx OCI artifact;
+- real SBOM/provenance subject binding;
+- a live Docker Scout result;
+- live MCP execution or provider-side revocation.
+
+This fail-closed behavior is also exercised by the dedicated `customer-trust` CI workflow.
 
 ---
 
-## 3. Run the live customer flow
+## 3. Run the live Customer Trust Flow
 
-Before a customer-facing live run, synchronize and verify the draft baseline source and establish the local signing key:
+Before a live customer-facing run:
 
 ```bash
 make baseline-sync
@@ -71,86 +81,162 @@ make baseline-lock-sign
 make baseline-lock-verify-signature
 ```
 
-Then run:
+Then use the default observation mode:
 
 ```bash
-make golden-demo
+make customer-trust SCOUT_MODE=observe
 ```
 
-The live lifecycle is expected to:
+Equivalent installed CLI:
+
+```bash
+abl-trust --scout-mode observe
+```
+
+For MCP-focused environments:
+
+```bash
+make customer-trust-mcp SCOUT_MODE=observe
+```
+
+The live lifecycle is:
 
 ```text
-readiness
+readiness + signed baseline lock
   ↓
 unique Docker Sandbox + real coding task
   ↓
-Agent Baseline assessment
+Agent Baseline assessment + assurance
   ↓
-immutable evidence bundle
+agent-modified workspace
   ↓
-response exercise
+Docker Buildx OCI artifact
+  ├─ SBOM
+  └─ provenance
   ↓
-attestation + assurance
+OCI graph + attestation verification
   ↓
-portable customer evidence pack
+optional Docker Scout policy evidence
+  ↓
+agent → workspace → artifact lineage
+  ↓
+customer decision brief
+  ↓
+SARIF + signed customer trust handoff
 ```
 
-The important part is not the number of `PASS` controls. The important part is that every automated conclusion has inspectable evidence and unsupported conclusions remain non-green.
+The important result is not “how many controls are green”. The important result is whether the evidence chain is internally consistent, independently verifiable and explicit about what remains unproven.
 
 ---
 
-## 4. Inspect three artifacts, not thirty files
+## 4. Explain Docker Scout modes
 
-For a short meeting, show only these layers:
-
-### A. Human-readable assessment report
-
-Open the latest HTML report under `reports/`.
-
-Highlight:
-
-- control status;
-- explanation;
-- evidence references;
-- explicit `PARTIAL` / `MANUAL` outcomes.
-
-### B. Evidence manifest
-
-Open the corresponding:
+The project intentionally separates observation from gating:
 
 ```text
-evidence/abl-<run>/manifest.sha256.json
+off      Scout is excluded from the decision boundary
+observe  Scout evidence is collected but does not hard-block the disposition
+gate     Scout must pass before EVIDENCE_READY is possible
 ```
 
-Then run:
+For a first manager demo, prefer:
 
 ```bash
-make verify
+make customer-trust SCOUT_MODE=observe
 ```
 
-Explain that verification checks the evidence file digests and the normalized trace linkage rather than trusting the report presentation.
+This lets you show the integration without making the entire demonstration depend on one local Scout policy configuration.
 
-### C. Assurance summary
+Use `gate` when the PoC success criteria explicitly require Docker Scout as a hard condition.
 
-Run:
+---
 
-```bash
-make assurance-latest
-```
+## 5. Show four artifacts, not forty
+
+### A. Customer Trust Flow HTML
 
 Open:
 
 ```text
-reports/assurance-summary.json
+reports/<run-id>.trust/customer-trust-flow.html
 ```
 
-The assurance layer distinguishes blocking integrity failures from non-blocking findings and optional evidence that was not available.
+Use it to explain the complete chain from agent execution to signed handoff.
+
+### B. Customer Decision Brief
+
+Open:
+
+```text
+reports/<run-id>.trust/customer-decision.portable.html
+```
+
+Discuss the disposition:
+
+- `BLOCKED`;
+- `CONDITIONAL`;
+- `EVIDENCE_READY`;
+- `DRY_RUN`.
+
+Stress that `EVIDENCE_READY` means the configured PoC evidence boundary was satisfied — not production approval or Docker certification.
+
+### C. Trusted Artifact + lineage
+
+Open:
+
+```text
+reports/<run-id>.trust/trusted-artifact.portable.json
+reports/<run-id>.trust/agent-artifact-lineage.json
+```
+
+Explain that the project verifies:
+
+- the OCI graph;
+- SBOM/provenance presence **and subject binding**;
+- the artifact digest;
+- that the post-agent workspace digest matches the workspace used for lineage;
+- that the artifact did not change after the trust statement.
+
+### D. Final handoff
+
+The final file is:
+
+```text
+reports/<run-id>.customer-trust-handoff.zip
+```
+
+Verify it independently:
+
+```bash
+make trust-handoff-verify
+```
+
+or:
+
+```bash
+python -m agent_baseline_lab.trust_handoff \
+  reports/<run-id>.customer-trust-handoff.zip
+```
+
+The verifier checks the handoff manifest, member digests/sizes, nested customer evidence pack, nested signatures, private-key exclusion and lineage signature where present.
 
 ---
 
-## 5. Show the before/after model
+## 6. Show the developer/security integration
 
-When two verified runs exist:
+The flow also produces SARIF:
+
+```text
+reports/<run-id>.trust/agent-governance.sarif
+```
+
+This is useful to explain that the pattern can feed existing security tooling rather than requiring a custom dashboard.
+
+---
+
+## 7. Optional before/after story
+
+If the discussion moves from “is this run reviewable?” to “did governance change anything?”, switch to the comparative path.
 
 ```bash
 make governance-delta \
@@ -158,9 +244,7 @@ make governance-delta \
   AFTER=evidence/abl-<after>
 ```
 
-This produces a control-by-control transition statement without a security score.
-
-Then evaluate whether the pair is suitable for bounded causal discussion:
+Then:
 
 ```bash
 make experiment-protocol \
@@ -168,45 +252,27 @@ make experiment-protocol \
   AFTER=evidence/abl-<after>
 ```
 
-The distinction is important:
+Explain the distinction:
 
 ```text
 Governance Delta
   = what changed?
 
 Controlled Experiment Protocol
-  = were the measured prerequisites for causal interpretation present?
+  = were the measured prerequisites for causal discussion present?
 ```
 
-An improvement in control status is not automatically described as a treatment effect.
-
----
-
-## 6. Show the handoff
-
-Create the portable comparison pack:
-
-```bash
-make comparison-pack \
-  BEFORE=evidence/abl-<before> \
-  AFTER=evidence/abl-<after>
-
-make comparison-pack-verify
-```
-
-The handoff contains the before/after customer evidence, governance delta, verification material and public key while excluding the local private signing key.
-
-This is the point where the project becomes useful as a customer-enablement pattern: the reviewer does not need the originating workstation to inspect the evidence package.
+Do not mix this with the single-run Customer Trust decision; they answer different questions.
 
 ---
 
 ## Optional Docker MCP / AI Governance path
 
-When the required Docker capabilities and access are available:
+When the relevant Docker capabilities are available:
 
 ```bash
 make mcp-register-dhi
-make live-demo-mcp
+make customer-trust-mcp SCOUT_MODE=observe
 ```
 
 Use this path to discuss:
@@ -217,7 +283,7 @@ Use this path to discuss:
 - optional AI Governance audit evidence;
 - why static policy presence is not the same as observed enforcement.
 
-Do not make the optional licensed path a prerequisite for understanding the community PoC.
+The community path remains useful without licensed AI Governance signals.
 
 ---
 
@@ -225,12 +291,12 @@ Do not make the optional licensed path a prerequisite for understanding the comm
 
 A strong technical review should naturally lead to questions such as:
 
-- Which controls should be enforced locally and which centrally?
-- What identifiers should correlate the developer request, agent run, MCP decision and resulting artifact?
-- Which evidence should be signed or externally anchored?
-- What changes should invalidate a previous governance assessment?
-- When does a before/after comparison become sufficiently controlled to discuss causality?
-- Which parts of this pattern could become reusable enablement for multiple customer cohorts?
+- Which controls should be locally observed versus centrally enforced?
+- Should Scout be `observe` or `gate` for this customer cohort?
+- Which identifiers should correlate developer request, agent run, MCP decision and resulting image?
+- Which artifact evidence needs external organizational identity rather than a local key?
+- Which policy or base-image changes should force re-validation?
+- Which parts of this PoC could become a reusable enablement kit for many customers?
 
 ---
 
@@ -240,9 +306,12 @@ The project does not claim:
 
 - Agent Baseline certification;
 - official Docker conformance;
-- proof that telemetry was complete if an event was never emitted;
-- proof of signer identity from a signature alone;
-- proof of causality from a before/after status change;
-- upstream provider revocation unless an actual provider postcondition is verified.
+- that an SBOM proves an artifact is secure;
+- that provenance proves source code is correct;
+- that Scout passing means vulnerability-free;
+- that lineage proves runtime behavior is safe;
+- that a valid Ed25519 signature proves organizational identity;
+- that a before/after improvement proves causality;
+- provider-side revocation without a verified provider postcondition.
 
-That restraint is part of the design, not a missing feature.
+That restraint is part of the architecture.

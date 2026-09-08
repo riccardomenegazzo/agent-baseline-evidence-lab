@@ -1,12 +1,13 @@
 # Architecture
 
-Agent Baseline Evidence Lab is an **evidence engine**, not a compliance scanner and not a product-presence detector.
+Agent Baseline Evidence Lab is an **evidence and trust-lifecycle engine** for governed AI coding-agent workflows. It is not a compliance scanner, not a product-presence detector, and not a Docker certification tool.
 
-The architecture is intentionally split into three planes:
+The architecture is split into four trust planes:
 
-1. **Execution + assessment** — collect run-scoped implementation evidence;
-2. **Assurance + handoff** — verify, authenticate and package that evidence;
-3. **Before/after analysis** — compare verified runs while keeping causal interpretation separate.
+1. **Execution + assessment** — run the agent and collect run-scoped governance evidence.
+2. **Artifact trust** — build and verify the resulting OCI artifact, attestations and agent-to-artifact lineage.
+3. **Assurance + customer handoff** — independently verify, decide, package and authenticate shareable evidence.
+4. **Comparative evidence** — compare verified runs while keeping causal interpretation separate from status change.
 
 ---
 
@@ -14,278 +15,298 @@ The architecture is intentionally split into three planes:
 
 ```mermaid
 flowchart TD
-    AB[Authoritative Agent Baseline v1.0-draft] --> CAT[Control catalogue]
-    CFG[Declared agent / sandbox config] --> ENG[Evidence engine]
-    CAT --> ENG
-
-    TASK[Coding task] --> RUN[Disposable agent run]
+    TASK[Real coding task] --> RUN[Unique agent session]
     RUN --> SBX[Docker Sandbox]
     SBX --> CAPS[Execution capsule]
-    CAPS --> ENG
+    CAPS --> ASSESS[Agent Baseline assessment]
 
-    SBX --> OBS[Docker sbx observations]
-    MCP[Cedar / MCP evidence] --> ENG
-    OBS --> ENG
-    AUDIT[Optional Docker AI Governance audit] --> ENG
-    CHECKS[Artifact + scenario checks] --> ENG
+    AB[Agent Baseline v1.0-draft] --> ASSESS
+    OBS[Sandbox / network observations] --> ASSESS
+    MCP[MCP / Cedar policy evidence] --> ASSESS
+    AUDIT[Optional Docker AI Governance audit] --> ASSESS
+    CHECKS[Bounded scenarios + workspace validation] --> ASSESS
 
-    ENG --> TRACE[Normalized hash-chained trace]
-    ENG --> EV[Per-control evidence]
-    TRACE --> BUNDLE[Assessment evidence bundle]
-    EV --> BUNDLE
-    BUNDLE --> MANIFEST[SHA-256 manifest]
-    BUNDLE --> REPORT[JSON + HTML assessment]
-    BUNDLE --> ATTEST[Run attestation]
+    ASSESS --> TRACE[Hash-chained normalized trace]
+    ASSESS --> BUNDLE[Verified evidence bundle]
+    BUNDLE --> ASSURE[Independent assurance]
+    BUNDLE --> PACK[Portable customer evidence pack]
 
-    ATTEST --> SIGN[Optional Ed25519 signature]
-    BUNDLE --> RESP[Response / incident evidence]
-    BUNDLE --> ASSURE[Post-run assurance]
-    SIGN --> ASSURE
-    RESP --> ASSURE
+    CAPS --> WORKSPACE[Agent-modified workspace]
+    WORKSPACE --> BUILDX[Docker Buildx]
+    BUILDX --> OCI[OCI image archive]
+    BUILDX --> SBOM[SBOM attestation]
+    BUILDX --> PROV[SLSA provenance]
+    OCI --> ARTVERIFY[OCI graph + attestation verifier]
+    SBOM --> ARTVERIFY
+    PROV --> ARTVERIFY
+    SCOUT[Docker Scout policy evaluation] --> ARTVERIFY
+    ARTVERIFY --> TRUSTED[Trusted Artifact statement]
 
-    ASSURE --> PACK[Portable customer pack]
-    PACK --> PACKSIG[Optional pack signature]
+    CAPS --> LINEAGE[Agent → workspace → artifact lineage]
+    TRUSTED --> LINEAGE
+    BUNDLE --> DECISION[Customer Decision Brief]
+    ASSURE --> DECISION
+    TRUSTED --> DECISION
+    LINEAGE --> DECISION
+
+    DECISION --> SARIF[SARIF 2.1.0]
+    DECISION --> HANDOFF[Customer Trust Handoff]
+    PACK --> HANDOFF
+    TRUSTED --> HANDOFF
+    LINEAGE --> HANDOFF
+    SARIF --> HANDOFF
+    HANDOFF --> SIGN[Ed25519 signed handoff]
 
     BUNDLE --> DELTA[Governance Delta]
     BUNDLE2[Second verified bundle] --> DELTA
     DELTA --> EXP[Controlled Experiment Protocol]
-    DELTA --> COMP[Offline comparison handoff]
-    PACK --> COMP
-    PACK2[Second portable pack] --> COMP
+    DELTA --> COMP[Signed comparison handoff]
 ```
+
+The preferred manager/customer entrypoint is:
+
+```bash
+abl-trust --scout-mode observe
+```
+
+The core design rule is: **no downstream trust claim may be stronger than the evidence that feeds it.**
 
 ---
 
-## Plane 1 — execution and assessment
+# Plane 1 — execution and assessment
 
-### 1. Control catalogue
+## Control catalogue
 
-The project tracks Agent Baseline control IDs and implementation mappings while keeping authoritative requirement prose upstream. Baseline synchronization creates a source lock with source digest, control identifiers, version/status and drift information.
+The project tracks Agent Baseline control IDs and implementation mappings while keeping authoritative requirement prose upstream. Baseline synchronization creates a lock containing source digest, control identifiers, version/status and drift metadata. A live customer trust flow requires that lock to be verified and signed before agent execution.
 
-The baseline lock can be independently verified and signed before a live customer run.
+## Live execution capsule
 
-### 2. Live execution capsule
-
-A real agent task is executed separately from the assessment engine:
+A real task is executed separately from the assessment engine:
 
 ```text
-task file
-   │  SHA-256 + size persisted by default
-   ▼
+task digest
+   ↓
 disposable workspace copy
-   │
-   ▼
+   ↓
 unique Docker Sandbox
-   │
-   ├─ coding agent
-   ├─ network constraints
-   └─ optional static MCP registrations
-   │
-   ▼
+   ↓
+coding agent
+   ↓
 workspace before/after digests
 Docker observations
 agent execution metadata
-   │
-   ▼
+   ↓
 agent-run manifest
 ```
 
-Raw prompt and raw agent output are not persisted by default. The capsule records bounded metadata and digests unless explicit output capture is requested.
+Raw prompt and raw agent output are not persisted by default. The capsule records bounded metadata and cryptographic digests unless explicit output capture is requested.
 
-The execution capsule and assessment bundle are separate trust domains: the assessment verifies the imported capsule manifest before relying on it.
+The execution capsule and assessment bundle are distinct trust domains: the assessment verifies the capsule manifest before importing it.
 
-### 3. Evaluator layer
+## Evaluator layer
 
-Evaluators consume declared state and observed evidence from sources such as:
+Evaluators consume declared and observed evidence from sources such as:
 
 - Docker `sbx` inventory and policy commands;
-- safe host-canary separation checks;
+- host-canary separation checks;
 - network policy decision checks;
 - Docker MCP registration inventory;
 - Cedar policy static analysis;
 - optional Docker AI Governance audit JSONL;
-- artifact validation commands;
+- workspace validation hooks;
 - bounded adversarial scenarios;
-- response and correlation artifacts where applicable.
+- response and incident evidence where applicable.
 
 Each evaluator returns one of:
 
 `PASS` · `FAIL` · `PARTIAL` · `MANUAL` · `N/A` · `ERROR`
 
-A missing tool, unavailable telemetry source or evaluator exception is never promoted to positive evidence.
+Unavailable evidence never becomes a positive result.
 
-### 4. Normalized trace
+## Evidence bundle
 
-The lab writes one NDJSON event per normalized action. Each event contains a `prev_event_hash`; the current `event_hash` is SHA-256 over canonical JSON for the event content.
-
-External Docker audit events preserve available source identifiers such as audit event/session IDs rather than being rewritten to look native to the lab.
-
-### 5. Evidence store
-
-Each assessment receives a unique run ID and produces:
+Each assessment produces:
 
 - per-control evidence;
-- run observations;
-- normalized trace;
+- normalized hash-chained trace;
 - `assessment.json`;
-- SHA-256 file manifest;
-- JSON / HTML reports;
-- in-toto-style run attestation.
+- `manifest.sha256.json`;
+- JSON/HTML reports;
+- an in-toto-style run attestation.
 
-Privacy-sensitive local path prefixes and selected identity metadata are minimized before persistence/export where the relevant path supports it.
-
----
-
-## Plane 2 — assurance and customer handoff
-
-### Internal integrity anchors
-
-The assessment bundle uses:
-
-- per-file SHA-256 manifest;
-- trace hash chain;
-- final trace head + event count anchored in `assessment.json`.
-
-`abl verify` recomputes those relationships.
-
-These mechanisms provide **tamper evidence**, not tamper-proof storage.
-
-### External anchors and signatures
-
-The verifier can accept expected manifest/trace-head digests from outside the bundle.
-
-Run attestations, baseline locks, Governance Delta statements, experiment statements and customer packs can be authenticated with Ed25519 signatures.
-
-A valid signature means the verifier confirmed possession of the corresponding private key for the exact signed subject. It does **not** establish human or organizational identity unless the public key is trusted through an external channel.
-
-### Adversarial verifier matrix
-
-CI preserves several deliberately uncomfortable trust-boundary results:
-
-- single-file alteration must fail internal verification;
-- trace truncation must fail;
-- a coordinated producer-side rewrite can remain internally self-consistent;
-- an independently retained external digest detects that coordinated rewrite;
-- no exported artifact can prove a source event existed if it never entered the evidence pipeline.
-
-This keeps **integrity**, **external anchoring** and **source completeness** separate.
-
-### Response and incident layer
-
-Response mutation is separate from normal assessment execution.
-
-The live customer flow can:
-
-- stop the exact sandbox associated with the run;
-- verify the stopped postcondition;
-- create/remove a disposable sandbox-scoped credential binding;
-- verify the local binding is absent;
-- link response evidence back to the immutable assessment bundle;
-- register quarantine evidence;
-- build a digest-only incident bundle.
-
-Local credential-binding removal is not described as upstream provider token revocation.
-
-### Portable customer pack
-
-A customer pack is a deterministic transport artifact containing shareable assessment evidence and public trust material.
-
-The default pack excludes:
-
-- private Ed25519 signing keys;
-- raw local agent-run capsules;
-- out-of-root incident artifacts;
-- known local project/home path prefixes.
-
-The pack verifier protects against path traversal, symlinks, duplicate members, unmanifested content and evidence tampering.
-
-A signed pack authenticates the package relative to the supplied public key; it is still not an external organizational identity proof.
+`abl verify` recomputes manifest, trace chain, trace head and event-count relationships.
 
 ---
 
-## Plane 3 — before/after evidence
+# Plane 2 — artifact trust
 
-### Governance Delta
+The artifact trust plane answers a different question from the governance assessment:
 
-Governance Delta operates only on independently verified assessment bundles with the same Agent Baseline version/control set.
+> **Did the agent-modified workspace produce the exact container artifact we think it produced, and what supply-chain evidence can we verify about it?**
 
-It reports control transitions such as:
+## Buildx output
 
-- `control-improvement`;
-- `control-regression`;
-- `evidence-gain`;
-- `evidence-loss`;
-- `evaluator-recovery`;
-- `evaluator-error`;
-- `scope-change`;
-- `unchanged`.
+The trusted-artifact path builds the agent-modified workspace with Docker Buildx and requests:
 
-It deliberately does not compute a synthetic security score.
+- an OCI image archive;
+- SBOM attestation;
+- provenance attestation;
+- BuildKit metadata.
 
-The JSON delta is recomputable from the source bundles and can be signed.
+The OCI archive is local execution material. It is intentionally excluded from the default customer handoff; its digest and verification findings remain represented in portable trust evidence.
 
-### Controlled Experiment Protocol
+## OCI graph verification
 
-The experiment layer answers a different question:
+The verifier does not equate “archive exists” with “artifact trusted”. It traverses and verifies the OCI graph, including relevant descriptor digests and sizes, image manifest/config relationships and attestation manifests.
 
-> Are the two runs sufficiently controlled, based on measured evidence, to discuss the governance treatment as a possible causal factor?
+Where present, SBOM and provenance statements are checked for valid subject binding to the runnable image subject rather than accepted merely because an attestation media type exists.
 
-It evaluates required measured invariants such as:
+## Docker Scout modes
 
-- baseline version;
-- agent identity;
-- task ID;
-- task SHA-256;
-- initial workspace SHA-256;
-- agent runtime;
-- Docker Sandbox runtime fingerprint.
+The flow supports three explicit policy modes:
 
-The declared governance treatment is fingerprinted separately from those invariants.
+- `off` — Scout is not part of the artifact disposition;
+- `observe` — collect Scout policy evidence without making it a hard release gate;
+- `gate` — require the configured Scout evaluation to pass before `EVIDENCE_READY` can be returned.
 
-Results:
+A Scout pass is a bounded policy result for the evaluated image and policy set. It is not Docker certification and does not prove that the artifact is vulnerability-free.
 
-- `ELIGIBLE` — measured invariants match and treatment differs;
-- `NOT_ELIGIBLE` — an invariant differs or treatment is unchanged;
-- `INSUFFICIENT_EVIDENCE` — a required invariant cannot be established.
+## Trusted Artifact statement
 
-`ELIGIBLE` is only an eligibility boundary. It does not prove causality or eliminate unmeasured confounders.
+The machine-readable trusted-artifact statement records the observed artifact digest, OCI verification results, attestation findings, Scout result and claims boundary. A portable copy is generated before customer export so local filesystem prefixes are not leaked.
 
-### Comparison handoff
+## Agent-to-artifact lineage
 
-The offline comparison pack combines:
+The lineage statement binds:
 
-- before customer evidence pack;
-- after customer evidence pack;
-- Governance Delta JSON + HTML;
-- delta signature;
+```text
+agent session
+  ↓
+verified post-agent workspace digest
+  ↓
+trusted OCI artifact digest
+```
+
+Lineage creation fails if the workspace changed after the agent session or if the OCI archive changed after the trusted-artifact statement. The lineage statement can then be signed and independently verified.
+
+This proves a cryptographic relationship between recorded execution state and artifact state. It does not prove source-code correctness or runtime safety of every workload behavior.
+
+---
+
+# Plane 3 — assurance, decision and customer handoff
+
+## Internal integrity versus external trust
+
+The assessment bundle uses SHA-256 manifests, a trace hash chain and run anchors. These are **internal integrity mechanisms**, not immutable external trust anchors.
+
+Selected artifacts can be authenticated with Ed25519. A valid signature establishes possession of the corresponding key for the exact subject; external human/organizational identity still requires independent trust distribution.
+
+## Post-run assurance
+
+The assurance suite independently checks evidence integrity/authenticity contracts and reports:
+
+- `PASS` — verification executed and succeeded;
+- `FAIL` — blocking integrity/authenticity failure;
+- `FINDING` — non-blocking risk signal;
+- `NOT_RUN` — optional evidence unavailable.
+
+This layer remains separate from control statuses.
+
+## Customer Decision Brief
+
+The decision layer composes assessment, assurance and artifact trust evidence into one run-specific disposition:
+
+- `BLOCKED` — a required trust condition failed;
+- `CONDITIONAL` — useful evidence exists but the configured decision boundary is not fully satisfied;
+- `EVIDENCE_READY` — the configured evidence requirements for this PoC run are satisfied;
+- `DRY_RUN` — orchestration was exercised without live trust claims.
+
+`EVIDENCE_READY` is not production authorization, compliance certification or official Docker conformance.
+
+## SARIF integration
+
+Governance and artifact findings can be exported as SARIF 2.1.0 so the PoC can fit existing security-review workflows instead of requiring a custom dashboard.
+
+## Customer Trust Handoff
+
+The final handoff is a deterministic, manifest-driven ZIP that combines portable evidence needed to review the run, including as applicable:
+
+- golden customer evidence pack;
 - public verification key;
-- comparison manifest;
-- outer pack signature.
+- trusted-artifact statement + signature;
+- agent-artifact lineage + signature;
+- decision JSON/HTML + signature;
+- SARIF;
+- sanitized BuildKit/Scout evidence;
+- visual customer trust-flow summary.
 
-The pack requires distinct run IDs and remains private-key-free.
+The handoff verifier checks:
+
+- ZIP path safety and duplicate/unmanifested members;
+- SHA-256 and size of every manifested member;
+- private-key exclusion;
+- OCI binary archive exclusion;
+- nested customer evidence-pack verification;
+- nested customer-pack signature;
+- lineage signature when present.
+
+The final handoff itself is signed separately.
 
 ---
 
-## Core design rules
+# Plane 4 — comparative evidence
+
+## Governance Delta
+
+Governance Delta operates only on independently verified assessment bundles with the same Agent Baseline version/control set. It reports control and evidence transitions without a synthetic score.
+
+## Controlled Experiment Protocol
+
+The experiment layer checks whether required measured invariants match while the declared governance treatment differs. Outcomes are:
+
+- `ELIGIBLE`;
+- `NOT_ELIGIBLE`;
+- `INSUFFICIENT_EVIDENCE`.
+
+`ELIGIBLE` is only a prerequisite boundary for bounded causal discussion, not causal proof.
+
+## Comparison handoff
+
+The comparison pack combines independently verifiable before/after customer evidence, Governance Delta, signatures and public trust material while excluding private keys.
+
+---
+
+# Release supply-chain trust
+
+The project applies the same distinction to its own distribution artifacts.
+
+The release workflow produces wheel, source distribution, `SHA256SUMS` and `release-manifest.json`. Before publication it creates GitHub Artifact Attestations with SLSA provenance and verifies them with `gh attestation verify`.
+
+This adds repository/workflow-backed provenance to release artifacts; checksum verification and provenance verification remain distinct operations. See [`RELEASE_PROVENANCE.md`](RELEASE_PROVENANCE.md).
+
+---
+
+# Core design rules
 
 1. **Never infer `PASS` from product presence.**
-2. **No hidden green defaults.** Missing evidence remains visible.
-3. **Safe probes by default.** Prefer bounded decision checks and disposable canaries.
+2. **Never infer artifact trust from artifact existence.**
+3. **Missing evidence remains visible.**
 4. **Declared state and observed state remain separate.**
-5. **Evidence is run-scoped and independently verifiable.**
-6. **External telemetry is normalized, not silently trusted.**
-7. **Privacy is applied before persistence/export where supported.**
-8. **A signature is not an identity claim.**
-9. **A hash chain is not a source-completeness proof.**
-10. **A before/after change is not a causal conclusion.**
-11. **The draft baseline remains upstream-authoritative.**
+5. **Assessment trust and artifact trust are separate planes.**
+6. **SBOM/provenance must be subject-bound, not presence-checked.**
+7. **A policy pass is scoped to the evaluated policy set.**
+8. **Evidence is run-scoped and independently verifiable.**
+9. **Privacy is applied before customer export.**
+10. **A signature is not an identity claim.**
+11. **A hash chain is not a source-completeness proof.**
+12. **Artifact lineage is not source-code correctness proof.**
+13. **A before/after change is not a causal conclusion.**
+14. **The draft baseline remains upstream-authoritative.**
 
 ---
 
-## Docker boundary
+# Docker boundary
 
-The evidence engine executes on the host. Docker Sandboxes is the primary target execution boundary. The engine invokes documented Docker surfaces and stores bounded results as evidence.
+Docker Sandboxes is the primary agent execution surface. Docker Buildx and OCI attestations form the artifact-production path. Docker Scout is an optional policy evidence/gating layer. Docker MCP / AI Governance evidence remains environment-dependent and is treated separately from the community path.
 
-Docker AI Governance audit ingestion is optional and treated as a separate evidence source. The community path does not require licensed AI Governance evidence in order to remain useful.
-
-The architecture intentionally avoids pretending that local policy/configuration analysis is the same as centrally observed enforcement.
+The architecture intentionally avoids pretending that local policy files, local image metadata or product availability are equivalent to centrally observed enforcement or organizational certification.
