@@ -64,7 +64,7 @@ jobs:
           --workspace sample-app
           --reviewer ci-human-reviewer
           --reason "agent disabled for CI fallback contract"
-          --command python3 -m unittest discover -s tests -v
+          --command "python3 -m unittest discover -s tests -v"
           --output reports/fallback.json
       - name: Exercise full interview orchestration without Docker mutation
         run: >-
@@ -85,6 +85,8 @@ jobs:
           assert payload['credential_binding_revocation_verified'] is False
           assert payload['response_link_verified'] is False
           assert payload['response_link'] == ''
+          assert payload['quarantine_registered'] is False
+          assert payload['incident_bundle_verified'] is False
           PY
       - name: Run offline-safe assessment
         run: |
