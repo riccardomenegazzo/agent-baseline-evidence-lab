@@ -75,7 +75,6 @@ def run_verification_matrix(
     with tempfile.TemporaryDirectory(prefix="abl-evidence-matrix-") as temp_root:
         temp = Path(temp_root)
 
-        # 1. Alter one evidence file without updating its manifest entry.
         mutation = temp / "single-file-mutation"
         _copy_bundle(source, mutation)
         assessment_path = mutation / "assessment.json"
@@ -105,7 +104,6 @@ def run_verification_matrix(
             )
         )
 
-        # 2. Truncate the trace but leave assessment anchors and manifest untouched.
         truncation = temp / "trace-truncation"
         _copy_bundle(source, truncation)
         trace_path = truncation / "trace" / "events.ndjson"
@@ -141,7 +139,6 @@ def run_verification_matrix(
             )
         )
 
-        # 3. Simulate an attacker able to rewrite the trace, its local anchors, and manifest.
         coordinated = temp / "coordinated-rewrite"
         _copy_bundle(source, coordinated)
         _rewrite_anchors_after_trace_truncation(coordinated)
@@ -170,7 +167,6 @@ def run_verification_matrix(
             )
         )
 
-        # 4. No artifact mutation can reveal an event that was never emitted before export.
         scenarios.append(
             VerificationScenario(
                 id="event-never-emitted",
@@ -194,7 +190,7 @@ def run_verification_matrix(
 
     summary = {
         "schema_version": 1,
-        "source_evidence": str(source),
+        "source_evidence": f"evidence/{source.name}",
         "source_manifest_sha256": original_manifest,
         "source_trace_head_sha256": original_trace_head,
         "source_trace_event_count": original_summary.get("trace_event_count"),
