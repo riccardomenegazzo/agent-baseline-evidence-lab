@@ -15,6 +15,7 @@ from .trust_handoff import verify_handoff_pack
 class PresentationSummary:
     schema_version: int
     run_id: str
+    dry_run: bool
     decision: str
     overall_status: str
     trusted_artifact_status: str
@@ -36,26 +37,44 @@ def _load_json(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _latest_summary(root: Path) -> Path:
+def _select_summary(root: Path, run_id: str | None = None) -> Path:
+    reports = root / "reports"
+    if run_id:
+        candidate = reports / f"{run_id}.customer-trust-flow.json"
+        if not candidate.is_file():
+            raise ValueError(f"Customer Trust Flow summary not found for run {run_id}")
+        return candidate
+
     candidates = sorted(
-        (root / "reports").glob("abl-*.customer-trust-flow.json"),
+        reports.glob("abl-*.customer-trust-flow.json"),
         key=lambda path: path.stat().st_mtime,
         reverse=True,
     )
     if not candidates:
         raise ValueError("no Customer Trust Flow summary found; run `abl-trust` first")
+
+    for candidate in candidates:
+        try:
+            if not bool(_load_json(candidate).get("dry_run", False)):
+                return candidate
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
     return candidates[0]
 
 
-def build_presentation(root_path: str | Path = ".") -> PresentationSummary:
+def build_presentation(
+    root_path: str | Path = ".",
+    *,
+    run_id: str | None = None,
+) -> PresentationSummary:
     root = Path(root_path).resolve()
-    summary_path = _latest_summary(root)
+    summary_path = _select_summary(root, run_id=run_id)
     payload = _load_json(summary_path)
-    run_id = str(payload.get("assessment_run_id", ""))
-    if not run_id:
+    selected_run_id = str(payload.get("assessment_run_id", ""))
+    if not selected_run_id:
         raise ValueError(f"Customer Trust Flow summary has no assessment_run_id: {summary_path}")
 
-    trust_dir = root / "reports" / f"{run_id}.trust"
+    trust_dir = root / "reports" / f"{selected_run_id}.trust"
     handoff = root / str(payload.get("handoff_pack", ""))
     signature = root / str(payload.get("handoff_signature", ""))
     public_key = root / str(payload.get("public_key", ""))
@@ -73,10 +92,7 @@ def build_presentation(root_path: str | Path = ".") -> PresentationSummary:
         raise ValueError("presentation artifacts are missing: " + ", ".join(missing))
 
     lineage = trust_dir / "agent-artifact-lineage.json"
-    artifacts = {
-        name: path.relative_to(root).as_posix()
-        for name, path in required.items()
-    }
+    artifacts = {name: path.relative_to(root).as_posix() for name, path in required.items()}
     if lineage.is_file():
         artifacts["lineage"] = lineage.relative_to(root).as_posix()
 
@@ -93,7 +109,8 @@ def build_presentation(root_path: str | Path = ".") -> PresentationSummary:
 
     return PresentationSummary(
         schema_version=1,
-        run_id=run_id,
+        run_id=selected_run_id,
+        dry_run=bool(payload.get("dry_run", False)),
         decision=str(payload.get("decision", "")),
         overall_status=str(payload.get("overall_status", "")),
         trusted_artifact_status=str(payload.get("trusted_artifact_status", "")),
@@ -104,8 +121,9 @@ def build_presentation(root_path: str | Path = ".") -> PresentationSummary:
         artifacts=artifacts,
         claims_boundary=(
             "This helper verifies the final handoff and its external public-key signature, then selects the "
-            "small set of artifacts useful for a live presentation. It does not replace the underlying "
-            "assessment, OCI, lineage, or claims-boundary verifiers."
+            "small set of artifacts useful for a live presentation. It prefers the latest live run over a "
+            "newer dry-run unless --run-id is supplied. It does not replace the underlying assessment, OCI, "
+            "lineage, or claims-boundary verifiers."
         ),
     )
 
@@ -113,6 +131,7 @@ def build_presentation(root_path: str | Path = ".") -> PresentationSummary:
 def _print(summary: PresentationSummary) -> None:
     print("CUSTOMER TRUST PRESENTATION")
     print(f"  run:               {summary.run_id}")
+    print(f"  dry-run:           {summary.dry_run}")
     print(f"  decision:          {summary.decision}")
     print(f"  overall:           {summary.overall_status}")
     print(f"  trusted artifact:  {summary.trusted_artifact_status}")
@@ -132,6 +151,11 @@ def main(argv: list[str] | None = None) -> int:
         description="Verify and present the latest Customer Trust Flow artifacts"
     )
     parser.add_argument("--root", default=".")
+    parser.add_argument(
+        "--run-id",
+        default=None,
+        help="present one exact assessment run instead of auto-selecting the latest live run",
+    )
     parser.add_argument("--json", action="store_true", dest="as_json")
     parser.add_argument(
         "--open",
@@ -141,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        summary = build_presentation(args.root)
+        summary = build_presentation(args.root, run_id=args.run_id)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
 
