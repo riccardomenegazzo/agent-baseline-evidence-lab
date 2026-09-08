@@ -36,6 +36,9 @@ def test_interview_demo_uses_actual_live_sandbox_and_links_response(tmp_path: Pa
     )
     json_report = tmp_path / "reports" / "abl-assessment.json"
     html_report = tmp_path / "reports" / "abl-assessment.html"
+    json_report.parent.mkdir(parents=True, exist_ok=True)
+    json_report.write_text('{"run_id":"abl-assessment"}\n', encoding="utf-8")
+    html_report.write_text("<html><body>assessment</body></html>\n", encoding="utf-8")
     monkeypatch.setattr(
         interview_demo,
         "run_assessment",
@@ -92,6 +95,8 @@ def test_interview_demo_uses_actual_live_sandbox_and_links_response(tmp_path: Pa
     assert summary.response_link_verified is True
     assert summary.sandbox_stop_verified is True
     assert summary.credential_binding_revocation_verified is True
+    assert summary.quarantine_registered is True
+    assert summary.incident_bundle_verified is True
     assert summary.cleanup_succeeded is True
     assert Path(tmp_path / "reports" / "abl-assessment.interview-demo.json").exists()
 
@@ -149,3 +154,5 @@ def test_interview_demo_dry_run_never_creates_response_link(tmp_path: Path, monk
     assert summary.response_link_verified is False
     assert summary.sandbox_stop_verified is False
     assert summary.credential_binding_revocation_verified is False
+    assert summary.quarantine_registered is False
+    assert summary.incident_bundle_verified is False
