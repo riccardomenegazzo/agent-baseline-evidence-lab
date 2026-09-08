@@ -11,6 +11,7 @@ from .drift import build_baseline, compare_baseline, load_baseline
 from .evidence import verify_bundle
 from .evidence_matrix import run_verification_matrix
 from .incident_bundle import verify_incident_bundle
+from .privacy import portable_path
 from .quarantine import verify_registry
 from .signing import verify_signature
 from .unintended_action import analyze_changed_paths
@@ -102,7 +103,7 @@ def run_assurance_suite(root_path: str | Path = ".") -> AssuranceSummary:
             status="PASS" if expected_matrix else "FAIL",
             blocking=True,
             details={
-                "report": str(matrix_output),
+                "report": portable_path(root, matrix_output),
                 "key_result": matrix_summary.get("key_result"),
             },
         )
@@ -177,7 +178,7 @@ def run_assurance_suite(root_path: str | Path = ".") -> AssuranceSummary:
                     status="PASS" if signature_ok else "FAIL",
                     blocking=True,
                     details={
-                        "public_key": str(public_key),
+                        "public_key": portable_path(root, public_key),
                         "key_id": signature_summary.get("key_id"),
                     },
                 )
