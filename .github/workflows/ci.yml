@@ -8,12 +8,17 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
           cache: pip
@@ -32,6 +37,7 @@ jobs:
           python -m agent_baseline_lab.golden_flow --help
           python -m agent_baseline_lab.governance_delta --help
           python -m agent_baseline_lab.comparison_pack --help
+          python -m agent_baseline_lab.experiment_protocol --help
       - run: python -m unittest discover -s sample-app/tests -v
       - name: Exercise metadata-only live-run capsule
         run: abl live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess
@@ -77,19 +83,19 @@ jobs:
           --reason "agent disabled for CI fallback contract"
           --command "python3 -m unittest discover -s tests -v"
           --output reports/fallback.json
-      - name: Exercise full interview orchestration without Docker mutation
+      - name: Exercise full customer evidence orchestration without Docker mutation
         run: >-
           python -m agent_baseline_lab.interview_demo
           --config examples/agent.yaml
           --task examples/task.md
           --dry-run
-      - name: Assert interview dry-run cannot produce positive response claims
+      - name: Assert dry-run orchestration cannot produce positive response claims
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
           summaries = sorted(Path('reports').glob('*.interview-demo.json'), key=lambda p: p.stat().st_mtime)
-          assert summaries, 'interview-demo summary missing'
+          assert summaries, 'customer-flow summary missing'
           payload = json.loads(summaries[-1].read_text())
           assert payload['agent_executed'] is False
           assert payload['sandbox_stop_verified'] is False
@@ -295,7 +301,7 @@ jobs:
           assert pack.is_file()
           assert signature.is_file()
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: assessment-report
