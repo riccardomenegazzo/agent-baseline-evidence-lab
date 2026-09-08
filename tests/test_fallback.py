@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -16,7 +17,11 @@ def test_successful_fallback_is_evidenced_without_raw_output(tmp_path: Path) -> 
     assert result.human_review_required is True
     assert result.verified_success is True
     assert result.stdout_bytes > 0
-    assert "ok" not in (tmp_path / "fallback.json").read_text(encoding="utf-8")
+    payload = json.loads((tmp_path / "fallback.json").read_text(encoding="utf-8"))
+    assert "stdout" not in payload
+    assert "stderr" not in payload
+    assert payload["stdout_bytes"] == 3
+    assert len(payload["stdout_sha256"]) == 64
 
 
 def test_dry_run_never_claims_success(tmp_path: Path) -> None:
