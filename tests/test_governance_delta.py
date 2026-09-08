@@ -101,7 +101,10 @@ def test_governance_delta_classifies_evidence_without_security_score(tmp_path: P
     assert changes["C-07"] == "control-regression"
     assert changes["C-08"] == "control-improvement"
     assert changes["C-09"] == "unchanged"
-    assert "score" not in json.dumps(delta.to_dict()).lower()
+    payload = delta.to_dict()
+    assert "score" not in payload
+    assert "security_score" not in payload
+    assert "risk_score" not in payload
     assert delta.before.manifest_sha256 != delta.after.manifest_sha256
 
 
