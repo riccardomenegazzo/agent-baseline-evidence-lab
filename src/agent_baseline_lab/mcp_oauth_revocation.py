@@ -91,9 +91,7 @@ def authorization_state(value: Any) -> bool | None:
         recognized = [item for item in states if item is not None]
         if not recognized:
             return None
-        if any(recognized):
-            return True
-        return False
+        return bool(any(recognized))
     if isinstance(value, dict):
         for key in ("authorized", "authenticated", "hasCredential", "has_credential"):
             item = value.get(key)
