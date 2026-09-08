@@ -28,6 +28,7 @@ jobs:
           python -m pip install --force-reinstall --no-deps dist/*.whl
           abl --help
           python -m agent_baseline_lab.readiness --help
+          python -m agent_baseline_lab.portable_pack --help
       - run: python -m unittest discover -s sample-app/tests -v
       - name: Exercise metadata-only live-run capsule
         run: abl live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess
@@ -163,6 +164,27 @@ jobs:
           assert checks['evidence-trust-boundary-regression']['status'] == 'PASS'
           assert checks['attestation-signature']['status'] == 'PASS'
           assert checks['external-signing-anchor']['status'] == 'PASS'
+          PY
+      - name: Create and verify portable customer evidence pack
+        run: |
+          python -m agent_baseline_lab.portable_pack create \
+            --output reports/customer-evidence-pack.zip
+          python -m agent_baseline_lab.portable_pack verify \
+            reports/customer-evidence-pack.zip
+      - name: Assert portable pack exposes public trust material but never the private key
+        run: |
+          python - <<'PY'
+          import json
+          import zipfile
+          from pathlib import Path
+          pack = Path('reports/customer-evidence-pack.zip')
+          with zipfile.ZipFile(pack) as zf:
+              names = set(zf.namelist())
+              assert 'pack-manifest.json' in names
+              assert 'trust/attestation-public.json' in names
+              assert not any(name.endswith('attestation-private.json') for name in names)
+              manifest = json.loads(zf.read('pack-manifest.json'))
+              assert 'private signing keys' in manifest['excluded_categories']
           PY
       - uses: actions/upload-artifact@v4
         if: always()
