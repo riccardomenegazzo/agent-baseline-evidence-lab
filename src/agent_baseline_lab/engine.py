@@ -33,7 +33,7 @@ def run_assessment(config_path: str | Path, output_root: str | Path = ".") -> tu
     report_dir = out / "reports"
     store = EvidenceStore(evidence_dir, privacy_root=out)
     trace_path = evidence_dir / "trace" / "events.ndjson"
-    trace = TraceLedger(trace_path, run_id)
+    trace = TraceLedger(trace_path, run_id, privacy_root=out)
     config_path_ref = portable_path(out, cfg_path)
     source_config_sha256 = sha256_file(cfg_path)
 
