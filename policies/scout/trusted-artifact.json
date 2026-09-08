@@ -1,0 +1,27 @@
+{
+  "policies": [
+    {
+      "name": "fixable-vulnerabilities",
+      "weight": 20,
+      "config": {
+        "severities": ["CRITICAL", "HIGH"],
+        "grace_period_days": 7
+      }
+    },
+    {
+      "name": "approved-base-images",
+      "weight": 20,
+      "config": {
+        "allowed_base_images": [
+          "python:*",
+          "docker.io/library/python:*"
+        ],
+        "allowed_distros_only": true
+      }
+    },
+    {
+      "name": "supply-chain-attestations",
+      "weight": 20
+    }
+  ]
+}
