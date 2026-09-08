@@ -100,9 +100,9 @@ def write_portable_json(
     output_path = Path(output)
     if not output_path.is_absolute():
         output_path = root / output_path
-    _inside_parent = output_path.parent.resolve()
+    output_parent = output_path.parent.resolve()
     try:
-        _inside_parent.relative_to(root)
+        output_parent.relative_to(root)
     except ValueError as exc:
         raise ValueError("portable JSON output must stay inside project root") from exc
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -132,7 +132,7 @@ def create_handoff_pack(
         archive = _safe_archive_path(archive_path)
         if archive.endswith("attestation-private.json") or "private-key" in archive:
             raise ValueError("private signing material is forbidden in a customer trust handoff")
-        if archive.endswith("image.oci.tar") or archive.endswith(".oci.tar"):
+        if archive.endswith(("image.oci.tar", ".oci.tar")):
             raise ValueError("OCI image archives are intentionally excluded from the customer handoff")
         data = source_path.read_bytes()
         leaked = find_local_path_markers(data, root)
@@ -220,7 +220,7 @@ def verify_handoff_pack(path: str | Path) -> tuple[bool, list[str], dict[str, An
                 _safe_archive_path(name)
                 if name.endswith("attestation-private.json") or "private-key" in name:
                     errors.append(f"forbidden private signing material: {name}")
-                if name.endswith("image.oci.tar") or name.endswith(".oci.tar"):
+                if name.endswith(("image.oci.tar", ".oci.tar")):
                     errors.append(f"forbidden OCI image archive: {name}")
             if "handoff-manifest.json" not in names:
                 return False, ["handoff-manifest.json is missing"], {}
