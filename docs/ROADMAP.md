@@ -89,6 +89,8 @@ The action-chain analyzer intentionally reports **bounded correlation**, not str
 - [x] Ed25519 signing backend for exact evidence artifacts
 - [x] externally supplied public-key verification
 - [x] negative signature tests for subject mutation and wrong key
+- [x] consolidated post-run assurance suite with blocking failures vs non-blocking findings
+- [x] explicit separation of signature validity from external signer identity
 
 ### Baseline and schema trust
 
@@ -100,7 +102,29 @@ The action-chain analyzer intentionally reports **bounded correlation**, not str
 - [x] future/unknown schema rejection
 - [x] `.abl/` excluded from Git to protect local signing keys and response state
 
-### Still pending
+## V0.8 — customer handoff and release readiness ✅
+
+- [x] machine-readable `community` pre-demo readiness profile
+- [x] machine-readable `mcp` readiness profile with DHI endpoint identity check
+- [x] verified baseline lock required by readiness
+- [x] one canonical baseline cache path across sync/verify/sign/readiness
+- [x] live manager demos gated before sandbox creation; CI dry-run remains Docker-independent
+- [x] distributable wheel/sdist build in CI
+- [x] reinstall and smoke-test the built wheel rather than relying only on editable installs
+- [x] deterministic portable customer evidence ZIP for one assessment run
+- [x] portable-pack manifest with per-file SHA-256 and size
+- [x] embedded assessment-bundle verification after offline extraction
+- [x] embedded Ed25519 signature verification when signature evidence is present
+- [x] public verification key handoff with explicit private-key exclusion
+- [x] no raw `agent-runs/` capsule in the default customer handoff
+- [x] incident-referenced artifacts copied only when inside the project root and digest-valid
+- [x] ZIP path-traversal, symlink, duplicate-member and unmanifested-member protections
+- [x] negative tests for pack tampering and out-of-root incident evidence
+- [x] CI customer-pack creation, verification and private-key exclusion assertion
+
+The portable pack is a transport artifact, not an external trust anchor. Its final ZIP SHA-256 should be pinned or signed through an independent channel when handoff authenticity matters.
+
+## Still pending trust / enterprise integrations
 
 - [ ] optional public transparency-log publication (for example Sigstore/Rekor) using a format verified to be interoperable with the chosen log client
 - [ ] external/keyless identity binding for the signing key rather than local possession alone
@@ -117,6 +141,7 @@ Current upstream-quality material includes:
 - the independent-evidence verification matrix;
 - the coordinated-rewrite result;
 - the completeness-witness model;
-- the explicit distinction between integrity, external anchoring and source completeness.
+- the explicit distinction between integrity, external anchoring and source completeness;
+- the portable handoff model separating shareable evidence from private/local execution state.
 
 The strongest next upstream milestone remains a reproducible **real Docker AI Governance run** containing governed MCP evaluation/execution evidence without leaking prompt content, credentials, or customer-sensitive metadata.
