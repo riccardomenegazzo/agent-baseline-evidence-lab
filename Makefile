@@ -1,4 +1,4 @@
-.PHONY: install test lint preflight baseline-sync baseline-lock-verify baseline-lock-sign baseline-lock-verify-signature \
+.PHONY: install test lint preflight readiness readiness-mcp baseline-sync baseline-lock-verify baseline-lock-sign baseline-lock-verify-signature \
 	assess demo verify assurance-latest evidence-matrix audit-summary \
 	live-dry-run live-demo live-demo-mcp mcp-register-dhi mcp-inventory-dhi mcp-bypass-dhi mcp-oauth-status \
 	sandbox-create sandbox-run sandbox-shell sandbox-rm \
@@ -13,7 +13,7 @@ ABL := $(VENV)/bin/abl
 SANDBOX ?= abl-demo
 MCP_HOST ?= dhi.io
 MCP_SERVER ?= dhi
-BASELINE_CACHE ?= .cache/agent-baseline
+BASELINE_CACHE ?= .cache/agentbaseline
 
 install:
 	python3 -m venv $(VENV)
@@ -30,8 +30,18 @@ lint:
 preflight:
 	$(ABL) preflight
 
+readiness:
+	$(PYTHON) -m agent_baseline_lab.readiness \
+		--profile community --baseline-cache "$(BASELINE_CACHE)" \
+		--output reports/readiness-community.json
+
+readiness-mcp:
+	$(PYTHON) -m agent_baseline_lab.readiness \
+		--profile mcp --baseline-cache "$(BASELINE_CACHE)" \
+		--output reports/readiness-mcp.json
+
 baseline-sync:
-	$(ABL) sync-baseline
+	$(ABL) sync-baseline --cache "$(BASELINE_CACHE)"
 
 baseline-lock-verify:
 	$(PYTHON) -m agent_baseline_lab.baseline "$(BASELINE_CACHE)"
