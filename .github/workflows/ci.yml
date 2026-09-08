@@ -29,6 +29,7 @@ jobs:
           abl --help
           python -m agent_baseline_lab.readiness --help
           python -m agent_baseline_lab.portable_pack --help
+          python -m agent_baseline_lab.golden_flow --help
       - run: python -m unittest discover -s sample-app/tests -v
       - name: Exercise metadata-only live-run capsule
         run: abl live-run --config examples/agent.yaml --task examples/task.md --dry-run --assess
@@ -171,13 +172,15 @@ jobs:
             --output reports/customer-evidence-pack.zip
           python -m agent_baseline_lab.portable_pack verify \
             reports/customer-evidence-pack.zip
-      - name: Assert portable pack exposes public trust material but never the private key
+      - name: Assert portable pack privacy and trust material boundary
         run: |
           python - <<'PY'
           import json
           import zipfile
           from pathlib import Path
           pack = Path('reports/customer-evidence-pack.zip')
+          project = str(Path.cwd().resolve()).encode()
+          home = str(Path.home().resolve()).encode()
           with zipfile.ZipFile(pack) as zf:
               names = set(zf.namelist())
               assert 'pack-manifest.json' in names
@@ -185,6 +188,38 @@ jobs:
               assert not any(name.endswith('attestation-private.json') for name in names)
               manifest = json.loads(zf.read('pack-manifest.json'))
               assert 'private signing keys' in manifest['excluded_categories']
+              assert 'local project/home path prefixes' in manifest['excluded_categories']
+              for name in names:
+                  data = zf.read(name)
+                  assert project not in data, f'project path leaked in {name}'
+                  assert home not in data, f'home path leaked in {name}'
+          PY
+      - name: Exercise complete golden flow without live Docker mutation
+        run: python -m agent_baseline_lab.golden_flow --profile community --dry-run
+      - name: Assert golden dry-run is signed and never claims live response evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          summaries = sorted(Path('reports').glob('abl-*.golden-flow.json'), key=lambda p: p.stat().st_mtime)
+          assert summaries, 'golden-flow summary missing'
+          payload = json.loads(summaries[-1].read_text())
+          assert payload['dry_run'] is True
+          assert payload['readiness_checked'] is False
+          assert payload['readiness_ready'] is None
+          assert payload['baseline_signature_checked'] is False
+          assert payload['baseline_signature_verified'] is None
+          assert payload['response_link_verified'] is False
+          assert payload['quarantine_registered'] is False
+          assert payload['incident_bundle_verified'] is False
+          assert payload['attestation_signature_verified'] is True
+          assert payload['assurance_blocking_failures'] == 0
+          assert payload['customer_pack_verified'] is True
+          assert payload['customer_pack_signature_verified'] is True
+          pack = Path(payload['customer_pack'])
+          signature = Path(payload['customer_pack_signature'])
+          assert pack.is_file()
+          assert signature.is_file()
           PY
       - uses: actions/upload-artifact@v4
         if: always()
