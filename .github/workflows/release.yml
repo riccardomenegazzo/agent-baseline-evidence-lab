@@ -10,10 +10,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version without the v prefix (for example 0.14.0)"
+        description: "Release version without the v prefix (for example 0.15.0)"
         required: true
         type: string
-        default: "0.14.0"
+        default: "0.15.0"
 
 permissions:
   contents: write
@@ -188,6 +188,7 @@ jobs:
           .release-smoke/bin/abl-trust --help >/dev/null
           .release-smoke/bin/abl-policy --help >/dev/null
           .release-smoke/bin/abl-accept --help >/dev/null
+          .release-smoke/bin/abl-artifact-diff --help >/dev/null
           .release-smoke/bin/abl-policy list-profiles | grep -qx 'poc-observe'
           .release-smoke/bin/abl-policy list-profiles | grep -qx 'enterprise-strict'
           .release-smoke/bin/abl-policy list-profiles | grep -qx 'enterprise-supply-chain'
