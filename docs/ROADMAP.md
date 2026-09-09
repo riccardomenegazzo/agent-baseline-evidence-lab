@@ -149,6 +149,26 @@ Live environment work remains for reproducible real Docker AI Governance event f
 
 `REPACKAGED_EQUIVALENT` is bounded to the fields modeled by the verifier. It is not a claim of universal behavioral equivalence.
 
+## v0.16 — Verified Remediation Transition Pack ✅
+
+- [x] installable `abl-transition` CLI
+- [x] deterministic signed transition ZIP
+- [x] nested signed Governance Comparison Pack preserved as an independent evidence plane
+- [x] signed OCI Artifact Diff preserved as a separate evidence plane
+- [x] exact before/after trusted-artifact reports embedded and hash-bound to the signed diff
+- [x] common public-key continuity across nested governance pack, artifact diff and outer handoff
+- [x] duplicate and unsafe member-path rejection
+- [x] private-key exclusion
+- [x] portable verification without duplicating OCI layer archives
+- [x] optional full OCI source recomputation when both original artifact reports/archives are available
+- [x] fail-closed requirement for both before and after sources in full-recompute mode
+- [x] transition manifest binds before/after run IDs and artifact classification
+- [x] outer Ed25519 signature verification
+- [x] tamper regression for embedded source-report mutation
+- [x] explicit refusal to infer causality between governance and artifact transitions
+
+The transition handoff proves evidence binding and recomputability. It does not prove that a governance change caused an artifact change or that a remediation is complete.
+
 ---
 
 # Next high-value work
@@ -167,12 +187,12 @@ Live environment work remains for reproducible real Docker AI Governance event f
 - [ ] optional transparency-log publication where interoperable
 - [ ] multiple approved verification identities in a trust policy
 
-## Artifact transition handoff
+## Change-intent binding and promotion workflows
 
-- [ ] deterministic signed before/after artifact-transition pack
-- [ ] include verified OCI diff beside Governance Delta without conflating their semantics
 - [ ] bind remediation intent only when an explicit change request/ticket identity is available
+- [ ] verify that intent identifiers are externally resolvable without embedding credentials
 - [ ] optional artifact-diff acceptance policy for promotion workflows
+- [ ] keep observed transition evidence separate from authorization to promote/deploy
 
 ## Provider-side response postconditions
 
@@ -188,6 +208,7 @@ Live environment work remains for reproducible real Docker AI Governance event f
 - [x] customer policy profiles
 - [x] Customer Acceptance Envelope
 - [x] verified OCI Artifact Diff
+- [x] Verified Remediation Transition Pack
 - [x] downloadable provenance-backed releases
 - [ ] sanitized non-sensitive live evidence fixture
 - [ ] reusable workshop/facilitator kit
