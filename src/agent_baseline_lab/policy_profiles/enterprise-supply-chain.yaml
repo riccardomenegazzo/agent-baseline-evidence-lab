@@ -1,0 +1,40 @@
+schema_version: 2
+id: enterprise-supply-chain
+version: 1.0.0
+description: >
+  Artifact-aware enterprise example. It requires an evidence-ready decision, a verified
+  trusted artifact, passing Docker Scout and assurance, successful non-root/runtime/OCI
+  integrity checks, and explicit SBOM, provenance and subject-binding facts from the
+  trusted-artifact evidence.
+requirements:
+  decision:
+    allowed:
+      - EVIDENCE_READY
+  trusted_artifact:
+    allowed:
+      - VERIFIED
+  docker_scout:
+    allowed:
+      - PASS
+  assurance:
+    allowed:
+      - PASS
+  max_assessment_counts:
+    FAIL: 0
+    ERROR: 0
+    PARTIAL: 0
+    MANUAL: 0
+  trusted_artifact_checks:
+    default-non-root-user:
+      allowed:
+        - PASS
+    runtime-healthcheck:
+      allowed:
+        - PASS
+    oci-attestation-integrity:
+      allowed:
+        - PASS
+  artifact_facts:
+    sbom_present: true
+    provenance_present: true
+    subject_bindings_valid: true

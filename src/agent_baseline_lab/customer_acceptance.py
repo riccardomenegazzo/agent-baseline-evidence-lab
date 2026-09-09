@@ -42,12 +42,15 @@ class AcceptanceSummary:
     profile_sha256: str
     policy_status: str
     handoff_sha256: str
+    trusted_artifact_sha256: str
     files: list[AcceptanceFile]
     claims_boundary: str
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["files"] = [item.to_dict() for item in self.files]
+        if self.schema_version == 1:
+            payload.pop("trusted_artifact_sha256", None)
         return payload
 
 
@@ -91,29 +94,56 @@ def _role_map(manifest: dict[str, Any]) -> dict[str, str]:
     return roles
 
 
-def _decision_from_handoff(handoff: Path) -> tuple[bytes, str]:
+def _handoff_evidence(handoff: Path) -> tuple[bytes, bytes | None, str]:
     with zipfile.ZipFile(handoff, "r") as zf:
         manifest = json.loads(zf.read("handoff-manifest.json").decode("utf-8"))
         roles = _role_map(manifest)
-        member = roles.get("customer-decision")
-        if not member:
+        decision_member = roles.get("customer-decision")
+        if not decision_member:
             raise ValueError("customer trust handoff does not contain a customer-decision role")
-        return zf.read(member), str(manifest.get("source_run_id", ""))
+        artifact_member = roles.get("trusted-artifact")
+        artifact_bytes = zf.read(artifact_member) if artifact_member else None
+        return (
+            zf.read(decision_member),
+            artifact_bytes,
+            str(manifest.get("source_run_id", "")),
+        )
+
+
+def _decode_json_object(data: bytes, *, label: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"{label} in handoff is not valid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"{label} in handoff must be a JSON object")
+    return payload
 
 
 def _materialize_policy_evaluation(
     policy_source: str | Path,
     decision_bytes: bytes,
+    trusted_artifact_bytes: bytes | None,
     destination: Path,
 ) -> tuple[dict[str, Any], str]:
     profile, profile_sha256 = load_policy_profile(policy_source)
-    try:
-        decision = json.loads(decision_bytes.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError(f"customer decision in handoff is not valid JSON: {exc}") from exc
-    if not isinstance(decision, dict):
-        raise ValueError("customer decision in handoff must be a JSON object")
-    evaluation = evaluate_policy(profile, decision, profile_sha256=profile_sha256)
+    decision = _decode_json_object(decision_bytes, label="customer decision")
+    trusted_artifact = (
+        _decode_json_object(trusted_artifact_bytes, label="trusted artifact")
+        if trusted_artifact_bytes is not None
+        else None
+    )
+    artifact_sha256 = (
+        _sha256_bytes(trusted_artifact_bytes) if trusted_artifact_bytes is not None else ""
+    )
+    evaluation = evaluate_policy(
+        profile,
+        decision,
+        profile_sha256=profile_sha256,
+        trusted_artifact=trusted_artifact,
+        trusted_artifact_sha256=artifact_sha256,
+        evaluation_schema_version=2,
+    )
     destination.write_text(
         json.dumps(evaluation.to_dict(), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -156,23 +186,25 @@ def create_acceptance_pack(
     if not signature_ok:
         raise ValueError("handoff signature verification failed: " + "; ".join(signature_errors))
 
-    decision_bytes, source_run_id = _decision_from_handoff(handoff)
+    decision_bytes, trusted_artifact_bytes, source_run_id = _handoff_evidence(handoff)
     if not source_run_id:
         source_run_id = str(handoff_details.get("source_run_id", ""))
     if not source_run_id:
         raise ValueError("customer trust handoff does not identify its source run")
+    trusted_artifact_sha256 = (
+        _sha256_bytes(trusted_artifact_bytes) if trusted_artifact_bytes is not None else ""
+    )
 
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(prefix="abl-accept-") as tmp:
         tmp_root = Path(tmp)
-        decision = tmp_root / "customer-decision.json"
-        decision.write_bytes(decision_bytes)
         evaluation = tmp_root / "customer-policy-evaluation.json"
         evaluation_payload, profile_sha256 = _materialize_policy_evaluation(
             policy_source,
             decision_bytes,
+            trusted_artifact_bytes,
             evaluation,
         )
         if str(evaluation_payload.get("status", "")) != "PASS":
@@ -200,22 +232,24 @@ def create_acceptance_pack(
             )
 
         statement_payload = {
-            "schema_version": 1,
+            "schema_version": 2,
             "generated_at": _utc_now(),
             "source_run_id": source_run_id,
             "handoff_sha256": sha256_file(handoff),
             "handoff_signature_sha256": sha256_file(handoff_signature),
             "decision_sha256": _sha256_bytes(decision_bytes),
+            "trusted_artifact_sha256": trusted_artifact_sha256,
             "profile_id": str(evaluation_payload.get("profile_id", "")),
             "profile_version": str(evaluation_payload.get("profile_version", "")),
             "profile_sha256": profile_sha256,
             "policy_status": "PASS",
             "policy_evaluation_sha256": sha256_file(evaluation),
             "claims_boundary": (
-                "This statement binds one verified customer trust handoff to one exact customer "
-                "acceptance policy and its recomputable PASS evaluation. It does not alter the "
-                "underlying evidence, prove external signer identity, authorize production, or "
-                "constitute Docker/compliance certification."
+                "This statement binds one verified customer trust handoff, its customer decision, "
+                "the nested trusted-artifact evidence when present, one exact customer acceptance "
+                "policy and its recomputable PASS evaluation. It does not alter the underlying "
+                "evidence, prove external signer identity, authorize production, or constitute "
+                "Docker/compliance certification."
             ),
         }
         statement = tmp_root / "acceptance-statement.json"
@@ -272,7 +306,7 @@ def create_acceptance_pack(
             for role, archive, data in raw_entries
         ]
         summary = AcceptanceSummary(
-            schema_version=1,
+            schema_version=2,
             generated_at=str(statement_payload["generated_at"]),
             source_run_id=source_run_id,
             profile_id=str(evaluation_payload["profile_id"]),
@@ -280,11 +314,14 @@ def create_acceptance_pack(
             profile_sha256=profile_sha256,
             policy_status="PASS",
             handoff_sha256=sha256_file(handoff),
+            trusted_artifact_sha256=trusted_artifact_sha256,
             files=files,
             claims_boundary=(
                 "The acceptance envelope is customer-policy-specific. Its PASS status means only "
                 "that the included verified evidence handoff satisfies the exact included policy. "
-                "It is not a security score, production authorization, or certification."
+                "Artifact-aware profiles are evaluated directly against the trusted-artifact JSON "
+                "nested in that handoff. This is not a security score, production authorization, "
+                "or certification."
             ),
         )
         with zipfile.ZipFile(output, "w") as zf:
@@ -325,7 +362,8 @@ def verify_acceptance_pack(
             if "acceptance-manifest.json" not in names:
                 return False, ["acceptance-manifest.json is missing"], details
             manifest = json.loads(zf.read("acceptance-manifest.json").decode("utf-8"))
-            if manifest.get("schema_version") != 1:
+            manifest_schema = manifest.get("schema_version")
+            if manifest_schema not in {1, 2}:
                 errors.append("unsupported acceptance schema_version")
             roles = _role_map(manifest)
             expected = {"acceptance-manifest.json"}
@@ -365,14 +403,18 @@ def verify_acceptance_pack(
             if missing_roles:
                 errors.append("acceptance envelope missing role(s): " + ", ".join(missing_roles))
 
+            details["schema_version"] = manifest_schema
             details["verified_files"] = verified_files
             details["source_run_id"] = str(manifest.get("source_run_id", ""))
             details["profile_id"] = str(manifest.get("profile_id", ""))
             details["profile_version"] = str(manifest.get("profile_version", ""))
             details["profile_sha256"] = str(manifest.get("profile_sha256", ""))
             details["policy_status"] = str(manifest.get("policy_status", ""))
+            details["trusted_artifact_sha256"] = str(
+                manifest.get("trusted_artifact_sha256", "")
+            )
 
-            if not missing_roles:
+            if not missing_roles and manifest_schema in {1, 2}:
                 with tempfile.TemporaryDirectory(prefix="abl-accept-verify-") as tmp:
                     tmp_root = Path(tmp)
                     extracted: dict[str, Path] = {}
@@ -400,13 +442,21 @@ def verify_acceptance_pack(
                         )
                     details["nested_handoff_signature_verified"] = handoff_sig_ok
 
-                    decision_bytes, source_run_id = _decision_from_handoff(handoff)
+                    decision_bytes, trusted_artifact_bytes, source_run_id = _handoff_evidence(handoff)
                     decision = tmp_root / "customer-decision.json"
                     decision.write_bytes(decision_bytes)
+                    trusted_artifact_path: Path | None = None
+                    trusted_artifact_sha256 = ""
+                    if trusted_artifact_bytes is not None:
+                        trusted_artifact_path = tmp_root / "trusted-artifact.json"
+                        trusted_artifact_path.write_bytes(trusted_artifact_bytes)
+                        trusted_artifact_sha256 = _sha256_bytes(trusted_artifact_bytes)
+
                     policy_ok, policy_errors, recomputed = verify_policy_evaluation(
                         extracted["customer-policy-evaluation"],
                         extracted["customer-policy-profile"],
                         decision,
+                        trusted_artifact_path=trusted_artifact_path,
                     )
                     if not policy_ok:
                         errors.extend(f"customer policy: {error}" for error in policy_errors)
@@ -414,6 +464,7 @@ def verify_acceptance_pack(
                         errors.append("customer policy recomputes to non-PASS status")
                     details["policy_evaluation_verified"] = policy_ok
                     details["policy_recomputed_status"] = recomputed.status
+                    details["nested_trusted_artifact_sha256"] = trusted_artifact_sha256
 
                     evaluation_sig_ok, evaluation_sig_errors, _ = verify_signature(
                         extracted["customer-policy-evaluation"],
@@ -430,10 +481,18 @@ def verify_acceptance_pack(
                     statement = json.loads(
                         extracted["acceptance-statement"].read_text(encoding="utf-8")
                     )
+                    if not isinstance(statement, dict):
+                        raise ValueError("acceptance statement must be a JSON object")
+                    statement_schema = statement.get("schema_version")
+                    if statement_schema not in {1, 2}:
+                        errors.append("unsupported acceptance statement schema_version")
+                    if manifest_schema == 2 and statement_schema != 2:
+                        errors.append("acceptance schema v2 requires acceptance statement schema v2")
+
                     profile, profile_sha256 = load_policy_profile(
                         extracted["customer-policy-profile"]
                     )
-                    expected_statement = {
+                    expected_statement: dict[str, Any] = {
                         "source_run_id": source_run_id,
                         "handoff_sha256": sha256_file(handoff),
                         "handoff_signature_sha256": sha256_file(
@@ -448,6 +507,8 @@ def verify_acceptance_pack(
                             extracted["customer-policy-evaluation"]
                         ),
                     }
+                    if statement_schema == 2:
+                        expected_statement["trusted_artifact_sha256"] = trusted_artifact_sha256
                     for field, expected_value in expected_statement.items():
                         if statement.get(field) != expected_value:
                             errors.append(f"acceptance statement mismatch: {field}")
@@ -476,6 +537,10 @@ def verify_acceptance_pack(
                         errors.append("acceptance manifest policy_status is not PASS")
                     if str(manifest.get("handoff_sha256", "")) != sha256_file(handoff):
                         errors.append("acceptance manifest handoff_sha256 mismatch")
+                    if manifest_schema == 2 and str(
+                        manifest.get("trusted_artifact_sha256", "")
+                    ) != trusted_artifact_sha256:
+                        errors.append("acceptance manifest trusted_artifact_sha256 mismatch")
 
                     if signature_path is not None:
                         outer_ok, outer_errors, _ = verify_signature(
@@ -484,7 +549,10 @@ def verify_acceptance_pack(
                             public_key_path=public_key,
                         )
                         if not outer_ok:
-                            errors.extend(f"acceptance envelope signature: {error}" for error in outer_errors)
+                            errors.extend(
+                                f"acceptance envelope signature: {error}"
+                                for error in outer_errors
+                            )
                         details["envelope_signature_verified"] = outer_ok
     except (
         OSError,
@@ -533,6 +601,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  run:       {summary.source_run_id}")
             print(f"  policy:    {summary.profile_id}@{summary.profile_version}")
             print(f"  status:    {summary.policy_status}")
+            if summary.trusted_artifact_sha256:
+                print(f"  artifact:  {summary.trusted_artifact_sha256}")
             print(f"  envelope:  {pack}")
             print(f"  signature: {signature}")
             return 0

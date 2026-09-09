@@ -66,9 +66,11 @@ def test_strict_profile_passes_complete_evidence(tmp_path: Path):
 
     result = create_policy_evaluation(profile, decision, output=output)
 
+    assert result.schema_version == 2
     assert result.status == "PASS"
     assert result.profile_id == "enterprise-strict"
     assert len(result.profile_sha256) == 64
+    assert result.trusted_artifact_sha256 == ""
     assert all(check.status == "PASS" for check in result.checks)
 
 
@@ -135,7 +137,7 @@ def test_profile_digest_changes_with_policy_semantics(tmp_path: Path):
     [
         (
             {
-                "schema_version": 2,
+                "schema_version": 3,
                 "id": "x",
                 "version": "1",
                 "requirements": {"decision": {"allowed": ["EVIDENCE_READY"]}},
@@ -159,6 +161,24 @@ def test_profile_digest_changes_with_policy_semantics(tmp_path: Path):
                 "requirements": {"max_assessment_counts": {"FAIL": -1}},
             },
             "non-negative integer",
+        ),
+        (
+            {
+                "schema_version": 2,
+                "id": "x",
+                "version": "1",
+                "requirements": {"artifact_facts": {"unknown": True}},
+            },
+            "unsupported artifact fact",
+        ),
+        (
+            {
+                "schema_version": 2,
+                "id": "x",
+                "version": "1",
+                "requirements": {"artifact_facts": {"sbom_present": "yes"}},
+            },
+            "must be boolean",
         ),
     ],
 )
