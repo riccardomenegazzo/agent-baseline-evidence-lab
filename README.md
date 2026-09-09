@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-%3E%3D3.11-blue)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-**A customer-ready reference PoC for turning AI coding-agent governance into reproducible, independently verifiable evidence — from Docker Sandbox execution to OCI supply-chain evidence, agent-to-artifact lineage, customer-specific acceptance and verified artifact change analysis.**
+**A customer-ready reference PoC for turning AI coding-agent governance into reproducible, independently verifiable evidence — from Docker Sandbox execution to OCI supply-chain evidence, agent-to-artifact lineage, customer-specific acceptance, verified artifact change analysis and signed remediation transition handoff.**
 
 > Community project. Not an official Docker, Snyk, Keycard or Agent Baseline project. It does **not** issue certifications or claim official conformance.
 
@@ -48,11 +48,41 @@ flowchart LR
     K --> L[Signed Customer Trust Handoff]
     L --> M[Versioned customer policy]
     M --> N[Signed Customer Acceptance Envelope]
+    N --> O[Verified before/after artifact diff]
+    O --> P[Signed remediation transition handoff]
 ```
 
 Every stage has its own evidence source, verifier, trust boundary and failure semantics. A skipped live probe is never converted into a pass.
 
 See [Customer Trust Flow](docs/CUSTOMER_TRUST_FLOW.md).
+
+---
+
+## v0.16: verified remediation transition pack
+
+A before/after customer engagement normally has at least two different questions:
+
+- **Did the governance evidence improve?**
+- **What actually changed in the OCI artifact?**
+
+`abl-transition` packages both answers into one signed handoff while keeping their semantics separate.
+
+```text
+before/after evidence ----> signed Governance Comparison Pack --+
+                                                               +--> signed Transition Pack
+before/after OCI trust ---> signed OCI Artifact Diff ----------+
+```
+
+The transition pack embeds the existing governance comparison, the signed artifact diff and the exact trusted-artifact reports used to generate that diff. It deliberately does **not** duplicate the potentially large OCI archives.
+
+A recipient gets two verification levels:
+
+- **portable verification** — deterministic member hashes, signatures, public-key continuity and source-report binding;
+- **full OCI recomputation** — when the original OCI archives are available, the verifier replays graph integrity, SBOM/provenance subject binding and the complete artifact diff.
+
+Governance change and artifact change are never treated as causal evidence for one another.
+
+See [Verified Remediation Transition Pack](docs/REMEDIATION_TRANSITION_PACK.md).
 
 ---
 
@@ -151,7 +181,8 @@ The repository currently implements:
 17. **Artifact-aware customer acceptance** against nested trusted-artifact evidence.
 18. **Signed Customer Acceptance Envelope** with offline recomputation.
 19. **Verified OCI Artifact Diff** distinguishing archive bytes, runnable graph and supply-chain evidence.
-20. **Release supply-chain dogfooding** with checksums and GitHub/Sigstore-backed SLSA provenance.
+20. **Verified Remediation Transition Pack** joining governance and artifact transitions without conflating them.
+21. **Release supply-chain dogfooding** with checksums and GitHub/Sigstore-backed SLSA provenance.
 
 ---
 
@@ -214,6 +245,32 @@ Live evidence remains dependent on the installed Docker/Sandboxes/MCP environmen
 
 ---
 
+## Create a remediation transition handoff
+
+```bash
+abl-transition create \
+  evidence/abl-before \
+  evidence/abl-after \
+  reports/before-trusted-artifact.json \
+  reports/after-trusted-artifact.json \
+  --output reports/remediation-transition.zip
+```
+
+Portable verification:
+
+```bash
+abl-transition verify \
+  reports/remediation-transition.zip \
+  --signature reports/remediation-transition.zip.ed25519.json \
+  --public .abl/keys/attestation-public.json
+```
+
+Add `--before-trusted-artifact`, `--after-trusted-artifact` and `--root` when the original OCI archives are locally available and full artifact-diff recomputation is required.
+
+See [Verified Remediation Transition Pack](docs/REMEDIATION_TRANSITION_PACK.md).
+
+---
+
 ## Compare two verified OCI artifacts
 
 ```bash
@@ -267,6 +324,7 @@ signature verifies        -> signer identity trusted
 hash chain verifies       -> source telemetry complete
 policy passes             -> production authorized
 artifact diff observed    -> cause of change proven
+transition pack verifies  -> remediation caused improvement
 before/after improves     -> treatment caused improvement
 ```
 
@@ -295,6 +353,7 @@ See [Download](DOWNLOAD.md) and [Release Provenance](docs/RELEASE_PROVENANCE.md)
 
 - [Executive Overview](docs/EXECUTIVE_OVERVIEW.md)
 - [Customer Trust Flow](docs/CUSTOMER_TRUST_FLOW.md)
+- [Verified Remediation Transition Pack](docs/REMEDIATION_TRANSITION_PACK.md)
 - [Verified OCI Artifact Diff](docs/OCI_ARTIFACT_DIFF.md)
 - [Customer Policy Profiles](docs/CUSTOMER_POLICY_PROFILES.md)
 - [Customer PoC](docs/CUSTOMER_POC.md)
@@ -322,6 +381,7 @@ make customer-trust-dry-run
 abl-policy list-profiles
 abl-accept --help
 abl-artifact-diff --help
+abl-transition --help
 ```
 
 The project is an **implementation, assurance and customer-PoC lab**, not a finished enterprise governance product. Remaining work is intentionally concentrated on real Docker AI Governance evidence, stronger external signer identity/trust anchors, provider-side revocation postconditions and sanitized live reference fixtures — not superficial green checks.
