@@ -40,6 +40,7 @@ abl-present = "agent_baseline_lab.present:main"
 abl-policy = "agent_baseline_lab.customer_policy:main"
 abl-accept = "agent_baseline_lab.customer_acceptance:main"
 abl-artifact-diff = "agent_baseline_lab.artifact_diff:main"
+abl-transition = "agent_baseline_lab.transition_pack:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
