@@ -39,6 +39,7 @@ abl-preflight = "agent_baseline_lab.demo_preflight:main"
 abl-present = "agent_baseline_lab.present:main"
 abl-policy = "agent_baseline_lab.customer_policy:main"
 abl-accept = "agent_baseline_lab.customer_acceptance:main"
+abl-artifact-diff = "agent_baseline_lab.artifact_diff:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
