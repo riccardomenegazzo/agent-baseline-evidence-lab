@@ -10,10 +10,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version without the v prefix (for example 0.13.1)"
+        description: "Release version without the v prefix (for example 0.14.0)"
         required: true
         type: string
-        default: "0.13.1"
+        default: "0.14.0"
 
 permissions:
   contents: write
@@ -190,11 +190,64 @@ jobs:
           .release-smoke/bin/abl-accept --help >/dev/null
           .release-smoke/bin/abl-policy list-profiles | grep -qx 'poc-observe'
           .release-smoke/bin/abl-policy list-profiles | grep -qx 'enterprise-strict'
+          .release-smoke/bin/abl-policy list-profiles | grep -qx 'enterprise-supply-chain'
+
           policy_tmp_dir=$(mktemp -d)
-          policy_tmp="$policy_tmp_dir/enterprise-strict.yaml"
-          .release-smoke/bin/abl-policy export-profile enterprise-strict --output "$policy_tmp"
+          policy_tmp="$policy_tmp_dir/enterprise-supply-chain.yaml"
+          .release-smoke/bin/abl-policy export-profile enterprise-supply-chain --output "$policy_tmp"
           test -s "$policy_tmp"
-          grep -q '^id: enterprise-strict$' "$policy_tmp"
+          grep -q '^schema_version: 2$' "$policy_tmp"
+          grep -q '^id: enterprise-supply-chain$' "$policy_tmp"
+
+          .release-smoke/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+
+          Path('/tmp/abl-release-decision.json').write_text(json.dumps({
+              'assessment_run_id': 'release-smoke',
+              'decision': 'EVIDENCE_READY',
+              'trusted_artifact_status': 'VERIFIED',
+              'scout_status': 'PASS',
+              'assurance_status': 'PASS',
+              'assessment_counts': {
+                  'PASS': 35,
+                  'FAIL': 0,
+                  'ERROR': 0,
+                  'PARTIAL': 0,
+                  'MANUAL': 0,
+              },
+          }), encoding='utf-8')
+          Path('/tmp/abl-release-artifact.json').write_text(json.dumps({
+              'overall_status': 'VERIFIED',
+              'scout_status': 'PASS',
+              'checks': [
+                  {'id': 'default-non-root-user', 'status': 'PASS', 'evidence': {}},
+                  {'id': 'runtime-healthcheck', 'status': 'PASS', 'evidence': {}},
+                  {
+                      'id': 'oci-attestation-integrity',
+                      'status': 'PASS',
+                      'evidence': {
+                          'summary': {
+                              'sbom_present': True,
+                              'provenance_present': True,
+                              'subject_bindings_valid': True,
+                          }
+                      },
+                  },
+              ],
+          }), encoding='utf-8')
+          PY
+          .release-smoke/bin/abl-policy evaluate \
+            builtin:enterprise-supply-chain \
+            /tmp/abl-release-decision.json \
+            --trusted-artifact /tmp/abl-release-artifact.json \
+            --output /tmp/abl-release-policy-evaluation.json
+          .release-smoke/bin/abl-policy verify \
+            /tmp/abl-release-policy-evaluation.json \
+            builtin:enterprise-supply-chain \
+            /tmp/abl-release-decision.json \
+            --trusted-artifact /tmp/abl-release-artifact.json
+
           .release-smoke/bin/python -m agent_baseline_lab.comparison_pack --help >/dev/null
           .release-smoke/bin/python -m agent_baseline_lab.trusted_artifact --help >/dev/null
           .release-smoke/bin/python -m agent_baseline_lab.trust_handoff --help >/dev/null
