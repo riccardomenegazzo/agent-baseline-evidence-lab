@@ -30,7 +30,7 @@ Issues = "https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/issue
 Changelog = "https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/releases"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3,<9", "ruff>=0.12,<1", "build>=1.2,<2"]
+dev = ["pytest>=8.3,<10", "ruff>=0.12,<1", "build>=1.2,<2"]
 
 [project.scripts]
 abl = "agent_baseline_lab.cli:main"
