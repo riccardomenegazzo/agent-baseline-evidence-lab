@@ -80,6 +80,8 @@ jobs:
                   assert project not in data, f'project path leaked in {name}'
                   assert home not in data, f'home path leaked in {name}'
           PY
+      - name: Verify presentation files and statuses against signed handoff
+        run: abl-present --json
       - name: Independently verify customer trust handoff
         run: |
           latest=$(ls -1t reports/abl-*.customer-trust-handoff.zip | head -1)
@@ -92,3 +94,4 @@ jobs:
             reports/
             evidence/
             agent-runs/
+

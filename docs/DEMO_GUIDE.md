@@ -216,7 +216,17 @@ After the flow finishes, run:
 abl-present
 ```
 
-This helper first independently verifies the final Customer Trust Handoff and its Ed25519 signature against the external public key. It then prints only the artifacts worth showing.
+This helper verifies the final Customer Trust Handoff and its Ed25519 signature against the selected local public key. It also binds each displayed HTML/JSON artifact to the signed ZIP member, checks the run ID and handoff digest, and checks the summary statuses against signed evidence. Modified neighboring reports are rejected even when the ZIP itself still verifies.
+
+The selected local key does not establish signer identity. The helper does not rerun Docker, rebuild the OCI artifact or recheck the live workspace; lineage status reflects the signed packaged evidence. For those checks, use the underlying verifiers with their original inputs.
+
+For a rehearsed presentation, select the exact run explicitly:
+
+```bash
+abl-present --run-id <assessment-run-id> --open
+```
+
+Without `--run-id`, a live run takes precedence over a newer dry-run. Always read the run ID and dry-run flag before explaining the result.
 
 To open the two presentation pages automatically:
 
@@ -246,7 +256,8 @@ Show these in order:
 Do not modify the successful live evidence during the interview. Use the deterministic regression tests instead:
 
 ```bash
-pytest -q tests/test_artifact_lineage.py -k mutation
+python -m pytest -q tests/test_artifact_lineage.py -k mutation
+python -m pytest -q tests/test_present.py -k 'changed or swapped or tampered'
 ```
 
 They prove that lineage creation is rejected when either:
@@ -324,3 +335,20 @@ The project does not claim:
 - provider-side revocation without a verified provider postcondition.
 
 That restraint is part of the architecture.
+
+
+## Explain the project as a customer engagement
+
+A concise opening:
+
+> I built this around a customer conversation: a team wants to adopt coding agents, but its security reviewers need evidence before they can agree on the next step. I wanted to turn that conversation into a small, reproducible engagement. We agree on a task and a control boundary, run the task, collect the evidence and produce a decision brief with blockers and next actions. A second reviewer can verify the signed handoff offline. Where the evidence is missing, the result stays conditional or blocked. The dry-run demonstrates the workflow; live runtime claims require a real run in the customer environment.
+
+If asked how this relates to customer experience, explain the practical work: clarify the customer's concern, agree on observable success criteria, reproduce the issue, identify which layer owns the gap, and leave a handoff another engineer can use. The project's value is the quality of that investigation and handoff.
+
+If asked what is original, distinguish the composition from the tools. Docker, BuildKit, Scout, OCI and cryptographic signatures already exist. The contribution is connecting run-specific governance evidence, artifact verification and customer-specific decisions while preserving their different limitations.
+
+If asked how you know it works, show the tests that reject altered inputs and one reproducible dry-run or a previously collected live run. Explain exactly which environment produced that evidence. Do not describe mocked integration inputs or dry-run output as observed Docker enforcement.
+
+If asked about business impact, propose measuring time from the initial question to a reproducible report, reviewer follow-up rounds and time to close an evidence gap in a real pilot. No customer deployment or measured business improvement is implied by the current test suite.
+
+If the live environment fails preflight, use the rehearsed dry-run and explain the missing prerequisite. A useful CXE demonstration includes diagnosing a limitation and giving a concrete next action; it does not require every result to be green.

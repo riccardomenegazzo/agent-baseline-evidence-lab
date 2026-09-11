@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from agent_baseline_lab.decision_brief import build_decision_brief, create_decision_brief
 from agent_baseline_lab.sarif_export import build_sarif, export_sarif
 
@@ -141,3 +143,57 @@ def test_sarif_exports_supply_chain_findings_and_writes_file(tmp_path: Path):
     rules = {result["ruleId"]: result for result in payload["runs"][0]["results"]}
     assert rules["ABL-SUPPLY-default-non-root-user"]["level"] == "error"
     assert rules["ABL-SUPPLY-base-image-reproducibility"]["level"] == "warning"
+
+
+
+@pytest.mark.parametrize("assessment", [{}, _assessment(), _assessment("N/A")])
+def test_missing_applicable_assessment_never_becomes_evidence_ready(assessment):
+    brief = build_decision_brief(
+        assessment, trusted_artifact=_trusted(),
+        assurance={"overall_status": "PASS", "blocking_failures": 0},
+    )
+    assert brief.decision == "CONDITIONAL"
+    assert brief.evidence_gaps
+    assert any("applicable controls" in action for action in brief.recommended_next_actions)
+
+
+@pytest.mark.parametrize("results", [
+    [None], ["PASS"], [{"control_id": "CON-01", "status": "UNKNOWN"}],
+    [{"control_id": "CON-01"}], [{"status": "PASS"}],
+    [{"control_id": "CON-01", "status": "PASS"}] * 2,
+])
+def test_malformed_assessment_cannot_silently_disappear(results):
+    with pytest.raises(ValueError):
+        build_decision_brief(
+            {"results": results}, trusted_artifact=_trusted(),
+            assurance={"overall_status": "PASS", "blocking_failures": 0},
+        )
+
+
+def test_incomplete_optional_artifact_is_an_evidence_gap():
+    brief = build_decision_brief(
+        _assessment("PASS"),
+        trusted_artifact={"overall_status": "NOT_RUN", "checks": []},
+        assurance={"overall_status": "PASS", "blocking_failures": 0},
+    )
+    assert brief.decision == "CONDITIONAL"
+    assert any("verification is incomplete" in gap for gap in brief.evidence_gaps)
+
+
+@pytest.mark.parametrize("checks", [None, {}, [None], [{"status": "UNKNOWN"}]])
+def test_malformed_artifact_checks_are_rejected(checks):
+    trusted = _trusted()
+    trusted["checks"] = checks
+    with pytest.raises(ValueError):
+        build_decision_brief(_assessment("PASS"), trusted_artifact=trusted)
+
+
+def test_artifact_label_without_checks_is_not_positive_evidence():
+    trusted = _trusted()
+    trusted["checks"] = []
+    brief = build_decision_brief(
+        _assessment("PASS"), trusted_artifact=trusted,
+        assurance={"overall_status": "PASS", "blocking_failures": 0},
+    )
+    assert brief.decision == "CONDITIONAL"
+    assert any("no verification checks" in gap for gap in brief.evidence_gaps)

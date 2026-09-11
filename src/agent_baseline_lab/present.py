@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import zipfile
 import webbrowser
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -37,10 +39,23 @@ def _load_json(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _run_id(value: Any) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"abl-[A-Za-z0-9][A-Za-z0-9._-]*", value):
+        raise ValueError("invalid assessment run ID")
+    return value
+
+
+def _local_file(root: Path, value: str | Path) -> Path:
+    path = (root / value).resolve()
+    if not path.is_relative_to(root):
+        raise ValueError("presentation artifact must stay inside project root")
+    return path
+
+
 def _select_summary(root: Path, run_id: str | None = None) -> Path:
     reports = root / "reports"
     if run_id:
-        candidate = reports / f"{run_id}.customer-trust-flow.json"
+        candidate = _local_file(root, reports / f"{_run_id(run_id)}.customer-trust-flow.json")
         if not candidate.is_file():
             raise ValueError(f"Customer Trust Flow summary not found for run {run_id}")
         return candidate
@@ -68,16 +83,18 @@ def build_presentation(
     run_id: str | None = None,
 ) -> PresentationSummary:
     root = Path(root_path).resolve()
-    summary_path = _select_summary(root, run_id=run_id)
+    summary_path = _local_file(root, _select_summary(root, run_id=run_id))
     payload = _load_json(summary_path)
-    selected_run_id = str(payload.get("assessment_run_id", ""))
-    if not selected_run_id:
-        raise ValueError(f"Customer Trust Flow summary has no assessment_run_id: {summary_path}")
+    selected_run_id = _run_id(payload.get("assessment_run_id"))
+    if summary_path.name != f"{selected_run_id}.customer-trust-flow.json":
+        raise ValueError("summary filename does not match assessment run ID")
+    if type(payload.get("schema_version")) is not int or payload["schema_version"] != 1:
+        raise ValueError("unsupported presentation summary schema_version")
 
-    trust_dir = root / "reports" / f"{selected_run_id}.trust"
-    handoff = root / str(payload.get("handoff_pack", ""))
-    signature = root / str(payload.get("handoff_signature", ""))
-    public_key = root / str(payload.get("public_key", ""))
+    trust_dir = _local_file(root, root / "reports" / f"{selected_run_id}.trust")
+    handoff = _local_file(root, str(payload.get("handoff_pack", "")))
+    signature = _local_file(root, str(payload.get("handoff_signature", "")))
+    public_key = _local_file(root, str(payload.get("public_key", "")))
 
     required = {
         "flow_html": trust_dir / "customer-trust-flow.html",
@@ -87,16 +104,17 @@ def build_presentation(
         "handoff_signature": signature,
         "public_key": public_key,
     }
+    required = {name: _local_file(root, path) for name, path in required.items()}
     missing = [name for name, path in required.items() if not path.is_file()]
     if missing:
         raise ValueError("presentation artifacts are missing: " + ", ".join(missing))
 
-    lineage = trust_dir / "agent-artifact-lineage.json"
+    lineage = _local_file(root, trust_dir / "agent-artifact-lineage.json")
     artifacts = {name: path.relative_to(root).as_posix() for name, path in required.items()}
     if lineage.is_file():
         artifacts["lineage"] = lineage.relative_to(root).as_posix()
 
-    handoff_ok, handoff_errors, _ = verify_handoff_pack(handoff)
+    handoff_ok, handoff_errors, details = verify_handoff_pack(handoff)
     signature_ok, signature_errors, _ = verify_signature(
         handoff,
         signature,
@@ -106,6 +124,66 @@ def build_presentation(
         raise ValueError("handoff verification failed: " + "; ".join(handoff_errors))
     if not signature_ok:
         raise ValueError("handoff signature verification failed: " + "; ".join(signature_errors))
+
+    # A valid ZIP does not authenticate its neighboring report files or summary.
+    # Bind every displayed artifact and status to the verified, signed package.
+    if payload.get("handoff_pack_sha256") != details.get("pack_sha256"):
+        raise ValueError("summary handoff digest does not match verified package")
+    with zipfile.ZipFile(handoff) as zf:
+        manifest = json.loads(zf.read("handoff-manifest.json"))
+        roles = {item["role"]: item["path"] for item in manifest["files"]}
+
+        def member(role: str) -> bytes:
+            if role not in roles:
+                raise ValueError(f"presentation handoff is missing role: {role}")
+            return zf.read(roles[role])
+
+        bound_roles = {
+            "flow_html": "customer-trust-flow-html",
+            "decision_html": "customer-decision-html",
+            "trusted_artifact": "trusted-artifact",
+            "public_key": "public-verification-key",
+        }
+        if "agent-artifact-lineage" in roles:
+            if not lineage.is_file():
+                raise ValueError("presentation artifacts are missing: lineage")
+            bound_roles["lineage"] = "agent-artifact-lineage"
+        elif lineage.is_file():
+            raise ValueError("local lineage is absent from signed handoff")
+        for name, role in bound_roles.items():
+            if (root / artifacts[name]).read_bytes() != member(role):
+                raise ValueError(f"presentation artifact differs from signed handoff: {name}")
+
+        decision = json.loads(member("customer-decision"))
+        trusted = json.loads(member("trusted-artifact"))
+        if not isinstance(decision, dict) or not isinstance(trusted, dict):
+            raise ValueError("signed presentation reports must be JSON objects")
+        dry_run = manifest.get("dry_run")
+        if type(dry_run) is not bool:
+            raise ValueError("handoff dry_run must be a boolean")
+        if manifest.get("source_run_id") != selected_run_id:
+            raise ValueError("signed handoff belongs to a different assessment run")
+        if decision.get("assessment_run_id") != selected_run_id:
+            raise ValueError("signed decision belongs to a different assessment run")
+        lineage_verified = details.get("lineage_signature_verified", False)
+        if dry_run and lineage_verified:
+            raise ValueError("dry-run handoff cannot claim live lineage")
+        signed_decision = decision.get("decision")
+        if signed_decision not in {"BLOCKED", "CONDITIONAL", "EVIDENCE_READY"}:
+            raise ValueError("unsupported signed decision status")
+        expected = {
+            "dry_run": dry_run,
+            "decision": signed_decision,
+            "trusted_artifact_status": trusted.get("overall_status"),
+            "scout_status": trusted.get("scout_status"),
+            "lineage_verified": lineage_verified,
+            "overall_status": (
+                "DRY_RUN" if dry_run else signed_decision if lineage_verified else "BLOCKED"
+            ),
+        }
+        for field, value in expected.items():
+            if value is None or type(payload.get(field)) is not type(value) or payload[field] != value:
+                raise ValueError(f"presentation summary disagrees with signed evidence: {field}")
 
     return PresentationSummary(
         schema_version=1,
@@ -120,10 +198,10 @@ def build_presentation(
         handoff_signature_verified=signature_ok,
         artifacts=artifacts,
         claims_boundary=(
-            "This helper verifies the final handoff and its external public-key signature, then selects the "
-            "small set of artifacts useful for a live presentation. It prefers the latest live run over a "
-            "newer dry-run unless --run-id is supplied. It does not replace the underlying assessment, OCI, "
-            "lineage, or claims-boundary verifiers."
+            "This helper verifies the final handoff signature against the selected local public key and binds "
+            "the displayed files and summary to its signed contents. Key-owner identity is not established. "
+            "It prefers the latest live run unless --run-id is supplied. It does not replay assessment, OCI, "
+            "or workspace lineage verification; lineage status reflects the signed packaged evidence."
         ),
     )
 
@@ -185,3 +263,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

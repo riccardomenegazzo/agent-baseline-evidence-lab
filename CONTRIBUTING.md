@@ -10,6 +10,7 @@ A larger feature surface is not automatically an improvement. Prefer a small eva
 make install
 make test
 make lint
+make customer-trust-dry-run
 make golden-demo-dry-run
 ```
 
@@ -67,6 +68,7 @@ make lint
 If the change affects orchestration, packaging, response semantics or portable handoffs, also run:
 
 ```bash
+make customer-trust-dry-run
 make golden-demo-dry-run
 ```
 
@@ -91,3 +93,4 @@ A strong contribution is:
 - covered by tests;
 - compatible with offline verification where applicable;
 - free of real secrets, customer data and private signing material.
+

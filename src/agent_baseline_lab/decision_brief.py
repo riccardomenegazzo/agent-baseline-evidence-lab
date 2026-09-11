@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .models import Status
+
 
 @dataclass(frozen=True)
 class DecisionBrief:
@@ -58,11 +60,19 @@ def _assessment_summary(payload: dict[str, Any]) -> tuple[Counter[str], list[str
     results = payload.get("results", [])
     if not isinstance(results, list):
         raise ValueError("assessment results must be an array")
-    for item in results:
+    seen: set[str] = set()
+    for index, item in enumerate(results, start=1):
         if not isinstance(item, dict):
-            continue
-        status = str(item.get("status", "ERROR"))
-        control_id = str(item.get("control_id", "unknown"))
+            raise ValueError(f"assessment result {index} must be an object")
+        status = item.get("status")
+        if not isinstance(status, str) or status not in {value.value for value in Status}:
+            raise ValueError(f"assessment result {index} has an unsupported status")
+        control_id = item.get("control_id")
+        if not isinstance(control_id, str) or not control_id.strip():
+            raise ValueError(f"assessment result {index} has no control_id")
+        if control_id in seen:
+            raise ValueError(f"duplicate assessment control_id: {control_id}")
+        seen.add(control_id)
         summary = str(item.get("summary", "")).strip()
         counts[status] += 1
         label = f"{control_id}: {summary}" if summary else control_id
@@ -72,6 +82,10 @@ def _assessment_summary(payload: dict[str, Any]) -> tuple[Counter[str], list[str
             gaps.append(label)
         elif status == "PASS":
             strengths.append(label)
+    if not results:
+        gaps.append("Assessment contains no control results; governance evidence is missing.")
+    elif counts["N/A"] == len(results):
+        gaps.append("All supplied controls are N/A; no applicable governance evidence was assessed.")
     return counts, blockers, gaps, strengths
 
 
@@ -93,20 +107,29 @@ def build_decision_brief(
 
     if trusted_artifact:
         checks = trusted_artifact.get("checks", [])
-        if isinstance(checks, list):
-            for item in checks:
-                if not isinstance(item, dict):
-                    continue
-                status = str(item.get("status", ""))
-                check_id = str(item.get("id", "trusted-artifact"))
-                summary = str(item.get("summary", "")).strip()
-                label = f"Supply chain / {check_id}: {summary}" if summary else f"Supply chain / {check_id}"
-                if status in {"FAIL", "ERROR"}:
-                    blockers.append(label)
-                elif status in {"FINDING", "NOT_RUN"}:
-                    gaps.append(label)
-                elif status == "PASS":
-                    strengths.append(label)
+        if not isinstance(checks, list):
+            raise ValueError("trusted-artifact checks must be an array")
+        if not checks:
+            gaps.append("Trusted artifact report contains no verification checks.")
+        for item in checks:
+            if not isinstance(item, dict):
+                raise ValueError("trusted-artifact check must be an object")
+            status = item.get("status")
+            if not isinstance(status, str) or status not in {"PASS", "FAIL", "ERROR", "FINDING", "NOT_RUN"}:
+                raise ValueError("trusted-artifact check has an unsupported status")
+            check_id = str(item.get("id", "trusted-artifact"))
+            summary = str(item.get("summary", "")).strip()
+            label = f"Supply chain / {check_id}: {summary}" if summary else f"Supply chain / {check_id}"
+            if status in {"FAIL", "ERROR"}:
+                blockers.append(label)
+            elif status in {"FINDING", "NOT_RUN"}:
+                gaps.append(label)
+            elif status == "PASS":
+                strengths.append(label)
+        if artifact_status in {"FAILED", "ERROR"}:
+            blockers.append(f"Trusted artifact verification failed; observed {artifact_status}.")
+        if artifact_status != "VERIFIED":
+            gaps.append(f"Trusted artifact verification is incomplete; observed {artifact_status}.")
         if artifact_status == "VERIFIED":
             strengths.append("Trusted artifact: OCI SBOM/provenance and image-subject bindings verified.")
     elif require_trusted_artifact:
@@ -147,6 +170,8 @@ def build_decision_brief(
     next_actions: list[str] = []
     if blockers:
         next_actions.append("Resolve blocking FAIL/ERROR evidence and re-run the exact PoC flow before approval.")
+    if not counts or set(counts) == {"N/A"}:
+        next_actions.append("Run an assessment with applicable controls and preserve its evidence before approval.")
     if counts.get("PARTIAL", 0) or counts.get("MANUAL", 0):
         next_actions.append("Convert priority PARTIAL/MANUAL controls into observed evidence or document explicit risk acceptance.")
     if artifact_status != "VERIFIED":
@@ -261,3 +286,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
