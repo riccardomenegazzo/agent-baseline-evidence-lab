@@ -86,3 +86,16 @@ def test_openai_credential_missing_fails_noninteractive_demo(monkeypatch):
 
     assert check.status == "FAIL"
     assert "sbx secret set openai --oauth" in check.detail
+
+
+
+def test_preflight_rejects_mismatched_signing_pair(tmp_path):
+    from agent_baseline_lab.signing import generate_keypair
+    keys = tmp_path / ".abl/keys"
+    generate_keypair(keys / "attestation-private.json", keys / "attestation-public.json")
+    _, other_public = generate_keypair(tmp_path / "other-private", tmp_path / "other-public")
+    assert demo_preflight._signing_check(tmp_path).status == "PASS"
+    (keys / "attestation-public.json").write_bytes(other_public.read_bytes())
+    check = demo_preflight._signing_check(tmp_path)
+    assert check.status == "FAIL"
+    assert "mismatched" in check.detail

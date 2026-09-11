@@ -16,6 +16,7 @@ from .evidence import verify_bundle
 from .live_run import cleanup_sandbox, run_agent_task
 from .models import Status
 from .provenance import verify_run_attestation
+from .workspace import initialize_workspace
 
 
 ANSI = {
@@ -60,6 +61,20 @@ def _print_report_paths(report, json_path: Path, html_path: Path, output_root: s
     if isinstance(attestation, dict) and attestation.get("path"):
         print(f"Attestation: {Path(output_root).resolve() / str(attestation['path'])}")
         print(f"Attest SHA:  {attestation.get('sha256', '')}")
+
+
+def cmd_init(args) -> int:
+    try:
+        root = initialize_workspace(args.destination)
+    except (OSError, ValueError) as exc:
+        print(f"workspace initialization failed: {exc}", file=sys.stderr)
+        return 2
+    print(f"Workspace created: {root}")
+    print("Change to that directory, then run:")
+    print("  abl-trust --dry-run --scout-mode off")
+    print("  abl-present --open")
+    print("Expected: DRY_RUN, no live artifact or lineage claim.")
+    return 0
 
 
 def cmd_assess(args) -> int:
@@ -208,6 +223,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="abl", description="Agent Baseline Evidence Lab")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    init = sub.add_parser("init", help="create a standalone workspace with example assets and local keys")
+    init.add_argument("destination", help="new directory to create (must not already exist)")
+    init.set_defaults(func=cmd_init)
+
     assess = sub.add_parser("assess", help="run an assessment")
     assess.add_argument("--config", default="examples/agent.yaml")
     assess.add_argument("--output", default=".")
@@ -286,3 +305,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

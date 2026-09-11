@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-baseline-evidence-lab"
-version = "0.16.1"
+version = "0.17.0"
 description = "Evidence-driven AI coding-agent governance from Docker Sandbox execution to verifiable OCI artifact lineage and signed customer handoff."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -47,6 +47,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "agent_baseline_lab.policy_profiles" = ["*.yaml"]
+"agent_baseline_lab" = ["workspace_templates/.gitignore.template", "workspace_templates/**/*.template"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

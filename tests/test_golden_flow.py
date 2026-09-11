@@ -6,13 +6,13 @@ from types import SimpleNamespace
 import pytest
 
 from agent_baseline_lab import golden_flow
+from agent_baseline_lab.signing import generate_keypair
 
 
 def _keys(root: Path) -> None:
     keys = root / ".abl" / "keys"
     keys.mkdir(parents=True)
-    (keys / "attestation-private.json").write_text("private\n", encoding="utf-8")
-    (keys / "attestation-public.json").write_text("public\n", encoding="utf-8")
+    generate_keypair(keys / "attestation-private.json", keys / "attestation-public.json")
 
 
 def test_golden_flow_requires_preexisting_signing_keypair(tmp_path: Path) -> None:
@@ -130,3 +130,4 @@ def test_dry_run_golden_flow_skips_live_readiness_but_signs_handoff(
     assert summary.customer_pack == f"reports/{run_id}.customer-evidence-pack.zip"
     assert summary.customer_pack_signature_verified is True
     assert (reports / f"{run_id}.golden-flow.json").is_file()
+

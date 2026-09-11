@@ -10,10 +10,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version without the v prefix (for example 0.16.0)"
+        description: "Release version without the v prefix (for example 0.17.0)"
         required: true
         type: string
-        default: "0.16.0"
+        default: "0.17.0"
 
 permissions:
   contents: write
@@ -256,6 +256,10 @@ jobs:
           .release-smoke/bin/python -m agent_baseline_lab.customer_trust_flow --help >/dev/null
           .release-smoke/bin/python -m agent_baseline_lab.transition_pack --help >/dev/null
 
+      - name: Verify standalone workspace from the release wheel
+        if: steps.existing.outputs.exists != 'true'
+        run: .release-smoke/bin/python scripts/smoke_installed_workspace.py
+
       - name: Generate SLSA provenance for release artifacts
         if: steps.existing.outputs.exists != 'true'
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -293,3 +297,4 @@ jobs:
             --target "$SOURCE_COMMIT" \
             --title "Agent Baseline Evidence Lab v${RELEASE_VERSION}" \
             --notes-file "$RELEASE_NOTES"
+

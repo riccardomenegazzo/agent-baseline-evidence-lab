@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .baseline import verify_lock
+from .signing import validate_keypair
 from .commands import CommandResult, exists, parse_json_output, run
 
 
@@ -305,15 +306,20 @@ def _signing_check(root: Path) -> DemoPreflightCheck:
     private_key = root / ".abl" / "keys" / "attestation-private.json"
     public_key = root / ".abl" / "keys" / "attestation-public.json"
     present = private_key.is_file() and public_key.is_file()
+    valid = False
+    detail = "signing keypair missing; use `abl init` for a new workspace or initialize keys once"
+    if present:
+        try:
+            validate_keypair(private_key, public_key)
+            valid = True
+            detail = "local Ed25519 signing keypair is valid and matches"
+        except (OSError, ValueError, RecursionError):
+            detail = "signing keypair is malformed or mismatched; restore the matching pair"
     return DemoPreflightCheck(
         name="signing-keypair",
-        status="PASS" if present else "FAIL",
+        status="PASS" if valid else "FAIL",
         required=True,
-        detail=(
-            "local Ed25519 signing keypair is ready"
-            if present
-            else "signing keypair missing; initialize it once with `make signing-keygen`"
-        ),
+        detail=detail,
         evidence={
             "private_key_present": private_key.is_file(),
             "public_key_present": public_key.is_file(),
@@ -489,3 +495,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

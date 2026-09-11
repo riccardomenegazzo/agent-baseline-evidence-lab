@@ -335,8 +335,5 @@ jobs:
           cache: pip
       - run: python -m pip install '.[dev]'
       - run: python -m pytest
-      - name: Exercise installed demo and signed presentation
-        run: |
-          python -m agent_baseline_lab.signing keygen --private .abl/keys/attestation-private.json --public .abl/keys/attestation-public.json
-          abl-trust --dry-run --scout-mode off
-          abl-present --json
+      - name: Exercise installed wheel outside the checkout
+        run: python scripts/smoke_installed_workspace.py

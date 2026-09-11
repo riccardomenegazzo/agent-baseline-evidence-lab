@@ -12,7 +12,7 @@ from .evidence import sha256_file
 from .interview_demo import run_interview_demo
 from .portable_pack import create_pack, verify_pack
 from .readiness import run_readiness
-from .signing import sign_file, verify_signature
+from .signing import sign_file, validate_keypair, verify_signature
 
 
 @dataclass(frozen=True)
@@ -65,6 +65,7 @@ def _require_signing_keys(root: Path) -> tuple[Path, Path]:
             "golden flow requires an existing local Ed25519 keypair; run `make signing-keygen` first. "
             "Missing: " + ", ".join(missing)
         )
+    validate_keypair(private_key, public_key)
     return private_key, public_key
 
 
@@ -275,3 +276,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

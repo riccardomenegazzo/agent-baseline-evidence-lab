@@ -220,3 +220,15 @@ The transition handoff proves evidence binding and recomputability. It does not 
 Use reproducible implementation friction to propose narrowly evidenced Agent Baseline test methods or control feedback. Do not manufacture upstream feedback merely for visibility.
 
 The strongest next upstream milestone remains a reproducible **real Docker AI Governance run** with governed MCP evaluation/execution evidence and explicit privacy/claims boundaries.
+
+
+## v0.17 — Standalone workspace and signing input hardening
+
+- [x] Wheel-bundled example assets and offline `abl init` for a new directory
+- [x] Installed-wheel dry-run and presentation outside the checkout, including macOS CI
+- [x] Exclusive key creation, POSIX private-file permissions and pair validation before execution
+- [x] Strict signature/key metadata parsing and explicit verification failure for invalid inputs
+- [x] Documented rotation using new key paths while preserving old verification material
+- [x] Reproducible synthetic customer handoff diagnosis exercise
+
+Live customer outcome measurements and sanitized live Docker reference runs remain environment-dependent.

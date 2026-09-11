@@ -62,3 +62,12 @@ The following are especially important for this project:
 ## Disclosure principle
 
 A security fix must preserve the project's central evidence contract: **do not hide an uncertainty by turning it into a positive assertion.**
+
+
+## Local signing keys
+
+From v0.17.0, key generation refuses existing files and symlinks. New private keys use mode `0600` on POSIX and newly created key directories use `0700`. These are filesystem permissions, not encryption at rest or hardware-backed protection; Windows access control depends on the user's directory ACLs.
+
+Older keys are not automatically rewritten. Protect retained private keys and keep old public verification keys when rotating. See [Signing Keys](docs/SIGNING_KEYS.md) for the procedure and compatibility limits.
+
+Signing metadata is limited to 64 KiB per document. Verification requires schema version 1 as an integer, unique JSON fields, valid key/signature encodings and key-ID continuity. Missing files, malformed metadata and unknown versions return a failed verification. The supplied external key must match the embedded public key. This validates a signature relative to a key, not the identity or authorization of its owner.

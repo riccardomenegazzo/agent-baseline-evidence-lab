@@ -29,17 +29,25 @@ Starting with the first release after v0.10.2, GitHub Artifact Attestations also
 
 ## Install the wheel
 
-After downloading the wheel:
+After downloading the wheel, use Python 3.11 or newer:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install ./agent_baseline_evidence_lab-<version>-py3-none-any.whl
-abl --help
-abl-trust --help
+abl init my-evidence-lab
+cd my-evidence-lab
+abl-trust --dry-run --scout-mode off
+abl-present --open
 ```
 
-`abl` exposes the assessment-oriented CLI. `abl-trust` runs the complete customer trust lifecycle.
+Starting with v0.17.0, the wheel contains all assets for this walkthrough: community/MCP configurations, tasks, sample application and tests, Dockerfile checks and policy examples. No Git checkout or Make installation is needed.
+
+`abl init` creates a **new** directory and generates a local signing keypair. It refuses any existing destination, including an empty directory or symlink. No keys are distributed with the wheel. Installation may download dependencies; workspace initialization itself is offline.
+
+Run the subsequent commands from the initialized directory. Expected output is `DRY_RUN`, with artifact verification `NOT_RUN` and lineage `false`. It validates orchestration and signed handoff handling, not live enforcement.
+
+Key handling and rotation: [Signing Keys](docs/SIGNING_KEYS.md). Reproducible customer demonstration: [Customer Walkthrough](docs/CUSTOMER_WALKTHROUGH.md).
 
 On Windows PowerShell, activate the environment with:
 
@@ -102,7 +110,7 @@ A release is published only after the main `ci` workflow succeeds. The release w
 5. records artifact size, SHA-256 and source commit in `release-manifest.json`;
 6. generates `SHA256SUMS`;
 7. installs the wheel into a clean virtual environment;
-8. smoke-tests `abl`, the Customer Trust Flow and key verification modules;
+8. smoke-tests the entrypoints, creates a workspace outside the checkout and runs the complete dry-run and signed presentation from the installed wheel;
 9. creates GitHub/Sigstore-backed SLSA build provenance attestations for all four release files;
 10. runs `gh attestation verify` against every release file;
 11. publishes the immutable GitHub Release only if all preceding gates pass.
@@ -133,3 +141,4 @@ The project treats provenance as evidence, not certification.
 6. verify the release artifact attestations and immutable assets.
 
 The workflow can also be invoked manually or from a `v*` tag when needed, but the same version and release-note checks still apply.
+

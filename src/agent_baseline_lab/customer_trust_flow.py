@@ -14,7 +14,7 @@ from .evidence import sha256_file
 from .golden_flow import run_golden_flow
 from .privacy import find_local_path_markers, sanitize_text
 from .sarif_export import export_sarif
-from .signing import sign_file, verify_signature
+from .signing import sign_file, validate_keypair, verify_signature
 from .trust_handoff import create_handoff_pack, verify_handoff_pack, write_portable_json
 from .trusted_artifact import run_trusted_artifact
 
@@ -74,6 +74,7 @@ def _require_keys(root: Path) -> tuple[Path, Path]:
         raise ValueError(
             "customer trust flow requires a local Ed25519 keypair; run `make signing-keygen` first"
         )
+    validate_keypair(private_key, public_key)
     return private_key, public_key
 
 
@@ -401,3 +402,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

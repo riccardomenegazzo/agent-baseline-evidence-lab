@@ -29,7 +29,16 @@ Installation downloads Python dependencies. Once installed, this dry-run needs n
 
 `abl-present` verifies the handoff signature, checks the displayed files against the signed package and rejects a summary that disagrees with its evidence. The local signing key does not establish an independently trusted identity.
 
-For a release package, see [Download and verification](DOWNLOAD.md). The repository checkout includes the example task and build assets used by this walkthrough.
+The [release wheel](DOWNLOAD.md) also includes the complete walkthrough, with no Git checkout required. After installing it into a Python 3.11+ environment:
+
+```bash
+abl init my-evidence-lab
+cd my-evidence-lab
+abl-trust --dry-run --scout-mode off
+abl-present --open
+```
+
+`abl init` refuses existing directories and generates fresh local keys. See [Signing Keys](docs/SIGNING_KEYS.md) for protection, verification and rotation.
 
 ## What the customer receives
 
@@ -102,7 +111,7 @@ A passing signature proves possession of a key, not the identity of its owner. A
 | Area | Documentation |
 |---|---|
 | Customer engagement and success criteria | [Customer PoC](docs/CUSTOMER_POC.md), [Executive Overview](docs/EXECUTIVE_OVERVIEW.md) |
-| Short demo and technical questions | [Demo Guide](docs/DEMO_GUIDE.md) |
+| Short demo and technical questions | [Demo Guide](docs/DEMO_GUIDE.md), [Customer Walkthrough](docs/CUSTOMER_WALKTHROUGH.md) |
 | Assessment of 35 draft controls | [Control Coverage](docs/CONTROL_COVERAGE.md), [Evidence Model](docs/EVIDENCE_MODEL.md) |
 | Docker Sandbox and MCP evidence | [Live Agent Run](docs/LIVE_AGENT_RUN.md), [Audit Correlation](docs/AUDIT_CORRELATION.md) |
 | Runtime response and limitations | [Response Drill](docs/RESPONSE_DRILL.md), [Threat Model](docs/THREAT_MODEL.md) |
@@ -113,7 +122,7 @@ A passing signature proves possession of a key, not the identity of its owner. A
 | Distribution and provenance | [Download](DOWNLOAD.md), [Release Provenance](docs/RELEASE_PROVENANCE.md) |
 | Implemented versus environment-dependent work | [Roadmap](docs/ROADMAP.md) |
 
-Latest changes: [v0.16.1](docs/releases/v0.16.1.md). Feature history is in [Releases](https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/releases).
+Latest changes: [v0.17.0](docs/releases/v0.17.0.md). Feature history is in [Releases](https://github.com/riccardomenegazzo/agent-baseline-evidence-lab/releases).
 
 ## Development
 

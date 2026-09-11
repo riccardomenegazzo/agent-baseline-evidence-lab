@@ -22,6 +22,10 @@ Do not try to show every module in the repository.
 
 ---
 
+For a standalone wheel installation, follow [Download](../DOWNLOAD.md) and run `abl init` first. For a reproducible synthetic handoff investigation, use the [Customer Walkthrough](CUSTOMER_WALKTHROUGH.md). Key creation and rotation are documented in [Signing Keys](SIGNING_KEYS.md).
+
+The `make` commands below apply to a repository checkout. From an initialized wheel workspace, use the CLI directly: `abl sync-baseline`; `python -m agent_baseline_lab.baseline .cache/agentbaseline`; and `python -m agent_baseline_lab.signing sign .cache/agentbaseline/baseline.lock.json --private .abl/keys/attestation-private.json --output .cache/agentbaseline/baseline.lock.ed25519.json`. Then run the documented `abl-trust` preflight and live command. The workspace already has a signing keypair.
+
 ## 1. Prepare the Mac before the meeting
 
 For the local macOS path, Docker Sandboxes currently requires macOS Sonoma 14 or later on Apple silicon. The complete trust flow also needs a working Docker daemon and Docker Buildx for the trusted-artifact stage.
